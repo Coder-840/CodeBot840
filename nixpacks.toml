@@ -1,0 +1,8 @@
+[phases.setup]
+nixPkgs = ["python311", "nodejs_20"]
+
+[phases.install]
+cmds = ["python -m venv .venv && .venv/bin/pip install -r requirements.txt"]
+
+[start]
+cmd = ".venv/bin/python main.py"
