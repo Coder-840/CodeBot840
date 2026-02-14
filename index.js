@@ -38,17 +38,20 @@ function startBot() {
 
   // AUTO-HUNT (Fixed: Case-insensitive & smarter entity scan)
   setInterval(() => {
-    if (bot.pvp.target) return;
-    const target = Object.values(bot.players).find(p =>
-    p.entity &&
-    bountyList.has(p.username.toLowerCase())
-    )?.entity;
+  if (bot.pvp.target) return;
 
-    if (target) {
-      bot.pvp.attack(target);
-      bot.chat(`Engaging bounty: ${target.username}!`);
-    }
-  }, 1000);
+  const targetPlayer = Object.values(bot.players).find(p =>
+    p.entity &&
+    bountyList.has(p.username.toLowerCase()) &&
+    (!ignoreMode || ignoreAllowed.has(p.username.toLowerCase()))
+  );
+
+  if (targetPlayer) {
+    bot.pvp.attack(targetPlayer.entity);
+    bot.chat(`Engaging bounty: ${targetPlayer.username}!`);
+  }
+}, 1000);
+
 
   // AUTO-EQUIP
   setInterval(() => {
