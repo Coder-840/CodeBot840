@@ -60,16 +60,7 @@ function startBot() {
     // 1. HELP (Throttled for Anti-Spam)
     if (command === '$help') {
       const helpLines = [
-        '--- CodeBot840 Commands ---',
-        '$coords - Get location',
-        '$repeat [msg] [count] - Throttled loop',
-        '$ask [question] - AI chat',
-        '$goto [x] [y] [z] - Mine & Walk',
-        '$hunt [player] - Set bounty',
-        '$whitelist [player] - Clear bounty',
-        '$bountylist - View targets',
-        '$locate [player] - Search nearby',
-        '$kill - Self-terminate'
+        'CodeBot840 Commands: $coords, $kill, $hunt <player>, $whitelist <player>, $bountylist, $goto <x> <y> <z>, $ask <message>',
       ];
       for (const line of helpLines) {
         bot.chat(line);
