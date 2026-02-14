@@ -39,12 +39,11 @@ function startBot() {
   // AUTO-HUNT (Fixed: Case-insensitive & smarter entity scan)
   setInterval(() => {
     if (bot.pvp.target) return;
-    const target = Object.values(bot.entities).find(e =>
-      e.type === 'player' &&
-      e.username &&
-      bountyList.has(e.username.toLowerCase()) &&
-      (!ignoreMode || ignoreAllowed.has(e.username.toLowerCase()))
-    );
+    const target = Object.values(bot.players).find(p =>
+    p.entity &&
+    bountyList.has(p.username.toLowerCase())
+    )?.entity;
+
     if (target) {
       bot.pvp.attack(target);
       bot.chat(`Engaging bounty: ${target.username}!`);
