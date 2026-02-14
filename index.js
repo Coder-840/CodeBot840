@@ -100,7 +100,10 @@ function startBot() {
     else if (command === '$ask') {
       const question = args.slice(1).join(' ');
       if (!question) return bot.chat("Ask me a question!");
+      
       try {
+        console.log(`AI Request: ${question}`); // Debugging
+        
         const completion = await openrouter.chat.completions.create({
           model: "google/gemini-2.0-flash-lite-preview-02-05:free",
           messages: [
@@ -108,17 +111,32 @@ function startBot() {
             { role: "user", content: `Context: ${chatLogs.join(' | ')}\n\nQuestion: ${question}` }
           ]
         });
-        const answer = completion.choices?.[0]?.message?.content;
+
+        // DEBUG: See the raw response in Railway logs
+        console.log('OpenRouter Full Response:', JSON.stringify(completion, null, 2));
+
+        // The correct path for OpenRouter / OpenAI SDK v4+
+        const answer = completion.choices?.[0]?.message?.content || completion.choices?.[0]?.text;
+
         if (answer) {
-          bot.chat(answer.substring(0, 100));
+          bot.chat(answer.trim().substring(0, 100));
         } else {
-          bot.chat("No response from AI.");
+          bot.chat("AI returned an empty response. Check Railway logs.");
         }
       } catch (err) {
-        bot.chat("AI Error. Check key status.");
-        console.error(err);
+        // Detailed error logging
+        console.error("OpenRouter API Error:", err.message);
+        
+        if (err.message.includes('402')) {
+          bot.chat("AI Error: No credits or key restricted.");
+        } else if (err.message.includes('401')) {
+          bot.chat("AI Error: Invalid API Key.");
+        } else {
+          bot.chat(`AI Error: ${err.message.substring(0, 30)}`);
+        }
       }
     }
+
 
     else if (command === '$goto') {
       const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
