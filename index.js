@@ -117,7 +117,7 @@ function startBot() {
         const completion = await openrouter.chat.completions.create({
           model: "openrouter/auto",
           messages: [
-            { role: "system", content: "You are CodeBot840. Be extremely brief (max 1000 characters). You are an expert in all minecrft knowledge. Coding and math are following close behind." },
+            { role: "system", content: "You are CodeBot840. Be extremely brief (max 256 characters). You are an expert in all minecrft knowledge. Coding and math are following close behind." },
             { role: "user", content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}` }
           ]
         });
@@ -125,7 +125,7 @@ function startBot() {
         const answer = completion.choices?.[0]?.message?.content;
         if (answer) {
           const cleanAnswer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-          bot.chat(cleanAnswer.substring(0, 1000));
+          bot.chat(cleanAnswer.substring(0, 256));
         } else {
           bot.chat("AI returned an empty response.");
         }
