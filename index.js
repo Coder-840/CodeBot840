@@ -15,7 +15,7 @@ let chatLogs = [];
 let bountyList = new Set();
 
 // ===== IGNORE SYSTEM ADDED =====
-let ignoreMode = false;
+let ignoreMode = true;
 const ignoreAllowed = new Set(['player_840', 'chickentender']);
 // ================================
 
