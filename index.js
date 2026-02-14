@@ -3,6 +3,9 @@ const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const pvp = require('mineflayer-pvp').plugin;
 const OpenAI = require('openai');
 
+// 1. Move helper functions to the TOP (Global Scope)
+const cleanName = (name) => name ? name.replace(/§[0-9a-fk-or]/gi, '').toLowerCase() : '';
+
 const botArgs = {
   host: 'noBnoT.org',
   port: 25565,
@@ -21,36 +24,29 @@ const openrouter = new OpenAI({
 
 function startBot() {
   const bot = mineflayer.createBot(botArgs);
-  
-  // 1. Load your plugins
   bot.loadPlugin(pathfinder);
   bot.loadPlugin(pvp);
 
-  // 2. Add the Ghost Killer / Lobby Redirect fix here
+  // GHOST KILLER / LOBBY REDIRECT
   bot.on('login', () => {
-    console.log('CodeBot840 connected to the login proxy.');
-    // Small delay to let the lobby load, then try to enter the world
+    console.log('CodeBot840 connected to proxy.');
     setTimeout(() => {
-      // noBnoT often uses /play or just walking through a portal. 
-      // This command forces the server to move you if you're stuck.
       bot.chat('/play'); 
     }, 2000);
   });
 
-  // 3. Movement and Combat Initialization
   bot.once('spawn', () => {
     const mcData = require('minecraft-data')(bot.version);
     const moves = new Movements(bot, mcData);
     moves.canDig = true;
     bot.pathfinder.setMovements(moves);
     bot.pvp.movements = moves;
-    console.log('--- CodeBot840: Spawned in World ---');
+    console.log('--- CodeBot840: Online & Ready ---');
   });
 
-  // AUTO-HUNT SCANNER (Fixed with Clean Names)
+  // AUTO-HUNT SCANNER (Fixed ReferenceError)
   setInterval(() => {
     if (bot.pvp.target) return;
-    
     const target = Object.values(bot.entities).find(e => {
       if (e.type !== 'player' || !e.username) return false;
       return bountyList.has(cleanName(e.username));
@@ -59,9 +55,20 @@ function startBot() {
     if (target) {
       bot.pathfinder.setGoal(null);
       bot.pvp.attack(target);
-      bot.chat(`Target locked: ${cleanName(target.username)}. Executing.`);
+      bot.chat(`Target locked: ${cleanName(target.username)}. Ready for combat.`);
     }
   }, 1000);
+
+  // AUTO-EQUIP
+  setInterval(() => {
+    const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
+    armorTypes.forEach(type => {
+      const armor = bot.inventory.items().find(item => item.name.includes(type));
+      if (armor) bot.equip(armor, type).catch(() => {});
+    });
+    const sword = bot.inventory.items().find(item => item.name.includes('sword'));
+    if (sword) bot.equip(sword, 'hand').catch(() => {});
+  }, 5000);
 
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return;
@@ -71,12 +78,10 @@ function startBot() {
     const args = message.split(' ');
     const command = args[0].toLowerCase();
 
-    // 1. HELP (Single Line)
     if (command === '$help') {
       bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $hunt [user], $whitelist [user], $bountylist, $locate [user], $kill');
     }
 
-    // 2. REPEAT (2500ms delay)
     else if (command === '$repeat') {
       const count = parseInt(args[args.length - 1]);
       const repeatMsg = args.slice(1, -1).join(' ');
@@ -87,12 +92,11 @@ function startBot() {
       }
     }
 
-    // 3. BOUNTY SYSTEM (Fixed with cleanName)
     else if (command === '$hunt') {
       const targetName = cleanName(args[1]);
       if (!targetName) return bot.chat("Usage: $hunt [player]");
       bountyList.add(targetName);
-      bot.chat(`${targetName} is now a priority target.`);
+      bot.chat(`${targetName} marked for termination.`);
     }
 
     else if (command === '$whitelist') {
@@ -103,7 +107,10 @@ function startBot() {
       }
     }
 
-    // 4. AI ASK (Fixed Response Structure)
+    else if (command === '$bountylist') {
+      bot.chat(`Targets: ${Array.from(bountyList).join(', ') || 'None'}`);
+    }
+
     else if (command === '$ask') {
       const question = args.slice(1).join(' ');
       if (!question) return bot.chat("Ask me a question!");
@@ -111,33 +118,36 @@ function startBot() {
         const completion = await openrouter.chat.completions.create({
           model: "openrouter/auto", 
           messages: [
-            { role: "system", content: "You are CodeBot840, an anarchy bot. Answer detailed questions accurately." },
+            { role: "system", content: "You are CodeBot840. Be extremely brief (max 200 chars)." },
             { role: "user", content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}` }
-          ],
-          max_tokens: 300
+          ]
         });
-        
-        // Robust response parsing
         const answer = completion.choices?.[0]?.message?.content || completion.choices?.[0]?.text;
         if (answer) {
-          const cleanAnswer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-          bot.chat(cleanAnswer.substring(0, 250)); 
+          bot.chat(answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim().substring(0, 250)); 
         }
       } catch (err) {
-        console.log('AI Error:', err.message);
-        bot.chat("AI Error. Check logs.");
+        bot.chat("AI Error.");
       }
     }
 
-    // 5. UTILITY
     else if (command === '$goto') {
       const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
       if (isNaN(x)) return;
       bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z));
     }
+    else if (command === '$coords') {
+      const p = bot.entity.position;
+      bot.chat(`X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
+    }
     else if (command === '$kill') {
       bot.chat('/kill');
     }
+  });
+
+  bot.on('messagestr', (m) => {
+    if (m.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
+    if (m.includes('/login')) bot.chat(`/login ${PASSWORD}`);
   });
 
   bot.on('kicked', () => setTimeout(startBot, 10000));
