@@ -15,7 +15,7 @@ let chatLogs = [];
 let bountyList = new Set();
 
 const openrouter = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
+  baseURL: "https://openrouter.ai",
   apiKey: "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"
 });
 
@@ -26,22 +26,23 @@ function startBot() {
 
   bot.once('spawn', () => {
     const mcData = require('minecraft-data')(bot.version);
-    bot.pvp.movements = new Movements(bot, mcData);
-    bot.pvp.movements.canDig = true;
-    console.log('CodeBot840 spawned. Combat/Movement ready.');
+    const moves = new Movements(bot, mcData);
+    moves.canDig = true;
+    bot.pathfinder.setMovements(moves);
+    bot.pvp.movements = moves; // CRITICAL: This is why he wasn't moving!
+    console.log('CodeBot840: Combat & Movement Engine Loaded');
   });
 
-  // AUTO-HUNT (Fixed: Case-insensitive & smarter entity scan)
+  // AUTO-HUNT SCANNER
   setInterval(() => {
     if (bot.pvp.target) return;
     const target = Object.values(bot.entities).find(e =>
-      e.type === 'player' &&
-      e.username &&
-      bountyList.has(e.username.toLowerCase())
+      e.type === 'player' && e.username && bountyList.has(e.username.toLowerCase())
     );
     if (target) {
+      bot.pathfinder.setGoal(null); // Stop wandering
       bot.pvp.attack(target);
-      bot.chat(`Engaging bounty: ${target.username}!`);
+      bot.chat(`Bounty detected: ${target.username}. Commencing termination.`);
     }
   }, 1000);
 
@@ -85,48 +86,50 @@ function startBot() {
       const targetName = args[1]?.toLowerCase();
       if (!targetName) return bot.chat("Usage: $hunt [player]");
       bountyList.add(targetName);
-      bot.chat(`${targetName} added to bounty list.`);
+      const target = Object.values(bot.entities).find(e => e.username?.toLowerCase() === targetName);
+      if (target) {
+        bot.pathfinder.setGoal(null);
+        bot.pvp.attack(target);
+        bot.chat(`I see you, ${target.username}. Lock acquired.`);
+      } else {
+        bot.chat(`${targetName} added to bounty list. I will strike when seen.`);
+      }
     }
+
     else if (command === '$whitelist') {
       const targetName = args[1]?.toLowerCase();
       if (bountyList.delete(targetName)) {
-        bot.chat(`${targetName} pardoned.`);
+        bot.chat(`${targetName} has been spared.`);
         bot.pvp.stop();
       }
     }
-    else if (command === '$bountylist') {
-      bot.chat(`Targets: ${Array.from(bountyList).join(', ') || 'None'}`);
-    }
 
-    // 4. AI ASK (Fixed for DeepSeek R1 Free)
+    // 4. AI ASK (Expanded length)
     else if (command === '$ask') {
       const question = args.slice(1).join(' ');
       if (!question) return bot.chat("Ask me a question!");
       try {
         const completion = await openrouter.chat.completions.create({
-          model: "openrouter/auto", // Automatically picks the best available free model
+          model: "openrouter/auto", 
           messages: [
-            { role: "system", content: "You are CodeBot840. Try to be as brief as possible on your answers. However, if the question requires it, do not be afraid to type up a little more than usual. Your expertise is minecraft knowledge. Coding and math are right behind." },
-            { role: "user", content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}` }
-          ]
+            { role: "system", content: "You are CodeBot840, an intelligent anarchy bot. You are allowed to type long, detailed paragraphs. Answer accurately based on context." },
+            { role: "user", content: `Logs: ${chatLogs.join(' | ')}\nQ: ${question}` }
+          ],
+          max_tokens: 300 // Allows for the "paragraphs" you wanted
         });
         
         const answer = completion.choices?.[0]?.message?.content;
         if (answer) {
-          // Removes any <think> tags if it picks a DeepSeek model
           const cleanAnswer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-          bot.chat(cleanAnswer.substring(0, 100));
-        } else {
-          bot.chat("AI returned an empty response.");
+          // Minecraft chat max is ~256-320 depending on server. Substring to 250 to stay safe.
+          bot.chat(cleanAnswer.substring(0, 250)); 
         }
       } catch (err) {
-        console.error("AI Error:", err.message);
-        bot.chat("AI Error: Connection failed. Check OpenRouter credits.");
+        bot.chat("AI Error. Check logs.");
       }
     }
 
-
-    // 5. MOVEMENT / UTILITY
+    // 5. UTILITY
     else if (command === '$goto') {
       const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
       if (isNaN(x)) return;
@@ -134,7 +137,7 @@ function startBot() {
     }
     else if (command === '$coords') {
       const p = bot.entity.position;
-      bot.chat(`I am at X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
+      bot.chat(`X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
     }
     else if (command === '$kill') {
       bot.chat('/kill');
