@@ -8,6 +8,6 @@
   },
   "dependencies": {
     "mineflayer": "^4.20.0",
-    "mineflayer-auto-auth": "^1.1.0"
+    "mineflayer-auto-auth": "^2.0.0"
   }
 }
