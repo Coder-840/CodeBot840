@@ -1,1 +1,13 @@
-"scripts": { "start": "node index.js" }
+{
+  "name": "codebot840",
+  "version": "1.0.0",
+  "description": "Minecraft bot for noBnoT.org",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "mineflayer": "^4.20.0",
+    "mineflayer-auto-auth": "^1.1.0"
+  }
+}
