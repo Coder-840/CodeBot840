@@ -14,9 +14,10 @@ const PASSWORD = 'YourSecurePassword123';
 let chatLogs = [];
 let bountyList = new Set(); 
 
+// NEW API KEY INTEGRATED
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai",
-  apiKey: "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"
+  apiKey: "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"
 });
 
 function startBot() {
@@ -25,17 +26,25 @@ function startBot() {
   bot.loadPlugin(pathfinder);
   bot.loadPlugin(pvp);
 
-  // --- AUTO-HUNT LOGIC ---
-  // Scans render distance every 2 seconds for bounties
+  // SKILL: Auto-Equip Gear (Checks inventory every 5 seconds)
   setInterval(() => {
-    if (bot.pvp.target) return; // Don't switch if already fighting
+    const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
+    armorTypes.forEach(type => {
+      const armor = bot.inventory.items().find(item => item.name.includes(type));
+      if (armor) bot.equip(armor, type).catch(() => {});
+    });
+    const sword = bot.inventory.items().find(item => item.name.includes('sword'));
+    if (sword) bot.equip(sword, 'hand').catch(() => {});
+  }, 5000);
 
+  // AUTO-HUNT SCANNER
+  setInterval(() => {
+    if (bot.pvp.target) return;
     const playerEntity = bot.nearestEntity(e => 
       e.type === 'player' && bountyList.has(e.username)
     );
-
     if (playerEntity) {
-      bot.chat(`Bounty detected! Engaging ${playerEntity.username}...`);
+      bot.chat(`Bounty detected: ${playerEntity.username}. Initiating combat.`);
       bot.pvp.attack(playerEntity);
     }
   }, 2000);
@@ -48,21 +57,27 @@ function startBot() {
     const args = message.split(' ');
     const command = args[0].toLowerCase();
 
-    // 1. UPDATED $help
+    // 1. HELP (Throttled for Anti-Spam)
     if (command === '$help') {
-      bot.chat('--- CodeBot840 Commands ---');
-      bot.chat('$coords - Get bot location');
-      bot.chat('$repeat [msg] [count] - Throttled repeat');
-      bot.chat('$ask [question] - AI response');
-      bot.chat('$goto [x] [y] [z] - Pathfind & mine');
-      bot.chat('$hunt [player] - Add to kill list & attack');
-      bot.chat('$whitelist [player] - Remove from kill list');
-      bot.chat('$bountylist - View kill list');
-      bot.chat('$locate [player] - Find nearby player');
-      bot.chat('$kill - Bot executes /kill');
+      const helpLines = [
+        '--- CodeBot840 Commands ---',
+        '$coords - Get location',
+        '$repeat [msg] [count] - Throttled loop',
+        '$ask [question] - AI chat',
+        '$goto [x] [y] [z] - Mine & Walk',
+        '$hunt [player] - Set bounty',
+        '$whitelist [player] - Clear bounty',
+        '$bountylist - View targets',
+        '$locate [player] - Search nearby',
+        '$kill - Self-terminate'
+      ];
+      for (const line of helpLines) {
+        bot.chat(line);
+        await new Promise(r => setTimeout(r, 1600)); 
+      }
     }
 
-    // 2. $repeat [msg] [count]
+    // 2. REPEAT
     else if (command === '$repeat') {
       const count = parseInt(args[args.length - 1]);
       const repeatMsg = args.slice(1, -1).join(' ');
@@ -73,74 +88,76 @@ function startBot() {
       }
     }
 
-    // 3. $hunt [player]
+    // 3. HUNTING & BOUNTIES
     else if (command === '$hunt') {
       const targetName = args[1];
       if (!targetName) return bot.chat("Usage: $hunt [player]");
       bountyList.add(targetName);
       const target = bot.players[targetName]?.entity;
       if (target) {
-        bot.chat(`Target ${targetName} found! Engaging.`);
+        bot.chat(`Target found! Engaging ${targetName}.`);
         bot.pvp.attack(target);
       } else {
-        bot.chat(`${targetName} added to bounty list. I will attack when seen.`);
+        bot.chat(`${targetName} added to bounty list.`);
       }
     }
 
-    // 4. $whitelist [player]
     else if (command === '$whitelist') {
       const target = args[1];
       if (bountyList.delete(target)) {
-        bot.chat(`${target} removed from bounty list.`);
+        bot.chat(`${target} has been pardoned.`);
         if (bot.pvp.target?.username === target) bot.pvp.stop();
       }
     }
 
-    // 5. $bountylist
     else if (command === '$bountylist') {
       const names = Array.from(bountyList);
-      bot.chat(names.length > 0 ? `Bounties: ${names.join(', ')}` : "No active bounties.");
+      bot.chat(names.length > 0 ? `Active Bounties: ${names.join(', ')}` : "Kill list is empty.");
     }
 
-    // 6. $goto [x] [y] [z]
+    // 4. MOVEMENT & UTILITY
     else if (command === '$goto') {
       const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
+      if (isNaN(x) || isNaN(y) || isNaN(z)) return bot.chat("Usage: $goto X Y Z");
       const mcData = require('minecraft-data')(bot.version);
       const move = new Movements(bot, mcData);
       move.canDig = true;
       bot.pathfinder.setMovements(move);
       bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z));
-      bot.chat(`Moving to ${x} ${y} ${z}`);
+      bot.chat(`Walking to ${x}, ${y}, ${z}`);
     }
 
-    // 7. $coords & $locate & $kill
     else if (command === '$coords') {
       const p = bot.entity.position;
       bot.chat(`I am at X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
     }
+
     else if (command === '$locate') {
       const target = bot.players[args[1]]?.entity;
       if (target) {
         const p = target.position;
         bot.chat(`${args[1]} is at X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
       } else {
-        bot.chat("Player not in render distance.");
+        bot.chat("Target is not in my render distance.");
       }
     }
+
     else if (command === '$kill') {
       bot.chat('/kill');
-      bot.chat('Goodbye, cruel world... T-T');
     }
 
-    // 8. $ask [question]
+    // 5. AI ASK (Gemma 2 9B - Fast & Free)
     else if (command === '$ask') {
+      const question = args.slice(1).join(' ');
       try {
         const completion = await openrouter.chat.completions.create({
-          model: "openrouter/free",
-          messages: [{ role: "user", content: `Context: ${chatLogs.join('\n')}\nQ: ${args.slice(1).join(' ')}` }]
+          model: "google/gemini-2.0-flash-lite-preview-02-05:free",
+          messages: [{ role: "user", content: `Logs: ${chatLogs.join('\n')}\nQuestion: ${question}` }]
         });
-        bot.chat(completion.choices.message.content.substring(0, 100));
-      } catch (err) { bot.chat("AI Error."); }
+        bot.chat(completion.choices[0].message.content.substring(0, 100));
+      } catch (err) {
+        bot.chat("AI Error. Key may be inactive.");
+      }
     }
   });
 
@@ -148,6 +165,7 @@ function startBot() {
     if (m.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
     if (m.includes('/login')) bot.chat(`/login ${PASSWORD}`);
   });
+  
   bot.on('kicked', () => setTimeout(startBot, 10000));
   bot.on('error', () => setTimeout(startBot, 10000));
 }
