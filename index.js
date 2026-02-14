@@ -1,16 +1,7 @@
 const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
+const pvp = require('mineflayer-pvp').plugin;
 const OpenAI = require('openai');
-
-// OpenRouter Configuration
-const openrouter = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: "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",
-  defaultHeaders: {
-    "HTTP-Referer": "https://railway.app", // Optional for OpenRouter rankings
-    "X-Title": "CodeBot840"
-  }
-});
 
 const botArgs = {
   host: 'noBnoT.org',
@@ -18,71 +9,106 @@ const botArgs = {
   username: 'CodeBot840',
   version: '1.8.8'
 };
+
 const PASSWORD = 'YourSecurePassword123';
 let chatLogs = [];
+let bountyList = new Set(); // Stores unique player names
+
+// OpenRouter AI Setup
+const openrouter = new OpenAI({
+  baseURL: "https://openrouter.ai",
+  apiKey: "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"
+});
 
 function startBot() {
   const bot = mineflayer.createBot(botArgs);
+  
+  // Load Plugins
   bot.loadPlugin(pathfinder);
+  bot.loadPlugin(pvp);
 
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return;
     chatLogs.push(`${username}: ${message}`);
-    if (chatLogs.length > 10) chatLogs.shift();
+    if (chatLogs.length > 15) chatLogs.shift();
 
     const args = message.split(' ');
     const command = args[0].toLowerCase();
 
-    // --- COMMANDS ---
-    if (command === '$help') {
-      bot.chat('Commands: $coords, $repeat [msg] [count], $goto [x] [y] [z], $ask [question]');
-    }
-
-    else if (command === '$coords') {
-      const { x, y, z } = bot.entity.position;
-      bot.chat(`X:${Math.round(x)} Y:${Math.round(y)} Z:${Math.round(z)}`);
-    }
-
-    else if (command === '$repeat') {
-      const count = Math.min(parseInt(args[args.length - 1]), 10);
+    // 1. FIXED $repeat <msg> <count>
+    if (command === '$repeat') {
+      const count = parseInt(args[args.length - 1]);
       const repeatMsg = args.slice(1, -1).join(' ');
+      if (isNaN(count)) return bot.chat("Usage: $repeat hello 3");
+      
+      // Fixed: Loop actually runs 'count' times
       for (let i = 0; i < count; i++) {
         bot.chat(repeatMsg);
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise(r => setTimeout(r, 1500)); // Server cooldown
       }
     }
 
-    else if (command === '$goto') {
-      const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
-      const mcData = require('minecraft-data')(bot.version);
-      const move = new Movements(bot, mcData);
-      move.canDig = true;
-      bot.pathfinder.setMovements(move);
-      bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z));
-      bot.chat(`Walking to ${x} ${y} ${z}...`);
+    // 2. $kill (Self-terminate)
+    else if (command === '$kill') {
+      bot.chat('/kill');
+      bot.chat('Goodbye, world.');
     }
 
+    // 3. $hunt <player> (Punch to death)
+    else if (command === '$hunt') {
+      const targetName = args[1];
+      const target = bot.players[targetName]?.entity;
+      if (target) {
+        bot.chat(`Hunting ${targetName}...`);
+        bountyList.add(targetName);
+        bot.pvp.attack(target);
+      } else {
+        bot.chat(`I don't see ${targetName} nearby.`);
+      }
+    }
+
+    // 4. $bountylist & $whitelist
+    else if (command === '$bountylist') {
+      const names = Array.from(bountyList);
+      bot.chat(names.length > 0 ? `Target list: ${names.join(', ')}` : "The kill list is empty.");
+    }
+    else if (command === '$whitelist') {
+      const target = args[1];
+      if (bountyList.delete(target)) {
+        bot.chat(`${target} has been spared.`);
+        if (bot.pvp.target?.username === target) bot.pvp.stop();
+      }
+    }
+
+    // 5. $locate <player> (Entity Awareness)
+    else if (command === '$locate') {
+      const targetName = args[1];
+      const target = bot.players[targetName]?.entity;
+      if (target) {
+        const p = target.position;
+        bot.chat(`${targetName} is at X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
+      } else {
+        // Explaining the packet limitation
+        bot.chat("Player is out of render distance. I can only locate players near me.");
+      }
+    }
+
+    // 6. $ask (AI Response)
     else if (command === '$ask') {
-      const prompt = args.slice(1).join(' ');
       try {
         const completion = await openrouter.chat.completions.create({
-          model: "google/gemini-2.0-flash-lite-preview-02-05:free",
-          messages: [
-            { role: "system", content: "You are CodeBot840 on an anarchy server. Be brief." },
-            { role: "user", content: `Logs:\n${chatLogs.join('\n')}\n\nQuestion: ${prompt}` }
-          ],
+          model: "openrouter/free",
+          messages: [{ role: "user", content: `Logs: ${chatLogs.join('\n')}\n\nQ: ${args.slice(1).join(' ')}` }]
         });
         bot.chat(completion.choices[0].message.content.substring(0, 100));
-      } catch (err) {
-        bot.chat("AI Error - Key might be empty or restricted.");
-      }
+      } catch (err) { bot.chat("AI Error."); }
     }
   });
 
-  // --- RECONNECT & AUTH ---
-  bot.on('messagestr', (msg) => {
-    if (msg.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
-    if (msg.includes('/login')) bot.chat(`/login ${PASSWORD}`);
+  // Reconnect & Auth logic
+  bot.on('messagestr', (m) => {
+    if (m.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
+    if (m.includes('/login')) bot.chat(`/login ${PASSWORD}`);
   });
   bot.on('kicked', () => setTimeout(startBot, 10000));
   bot.on('error', () => setTimeout(startBot, 10000));
