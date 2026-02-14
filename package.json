@@ -1,14 +1,13 @@
 {
   "name": "codebot840",
   "version": "1.0.0",
-  "description": "Minecraft bot for noBnoT.org",
+  "description": "Minecraft bot with pathfinding",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "mineflayer": "^4.20.0",
-    "mineflayer-auto-auth": "^2.0.0"
     "mineflayer-pathfinder": "^2.4.0",
     "minecraft-data": "^3.0.0"
   }
