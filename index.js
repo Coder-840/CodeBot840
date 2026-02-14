@@ -24,38 +24,33 @@ function startBot() {
   bot.loadPlugin(pathfinder);
   bot.loadPlugin(pvp);
 
+  // Skill: Clean color codes from names (Required for Anarchy servers)
+  const cleanName = (name) => name ? name.replace(/§[0-9a-fk-or]/gi, '').toLowerCase() : '';
+
   bot.once('spawn', () => {
     const mcData = require('minecraft-data')(bot.version);
     const moves = new Movements(bot, mcData);
     moves.canDig = true;
     bot.pathfinder.setMovements(moves);
-    bot.pvp.movements = moves; // CRITICAL: This is why he wasn't moving!
-    console.log('CodeBot840: Combat & Movement Engine Loaded');
+    bot.pvp.movements = moves;
+    console.log('--- CodeBot840: Online & Lethal ---');
   });
 
-  // AUTO-HUNT SCANNER
+  // AUTO-HUNT SCANNER (Fixed with Clean Names)
   setInterval(() => {
     if (bot.pvp.target) return;
-    const target = Object.values(bot.entities).find(e =>
-      e.type === 'player' && e.username && bountyList.has(e.username.toLowerCase())
-    );
+    
+    const target = Object.values(bot.entities).find(e => {
+      if (e.type !== 'player' || !e.username) return false;
+      return bountyList.has(cleanName(e.username));
+    });
+
     if (target) {
-      bot.pathfinder.setGoal(null); // Stop wandering
+      bot.pathfinder.setGoal(null);
       bot.pvp.attack(target);
-      bot.chat(`Bounty detected: ${target.username}. Commencing termination.`);
+      bot.chat(`Target locked: ${cleanName(target.username)}. Executing.`);
     }
   }, 1000);
-
-  // AUTO-EQUIP
-  setInterval(() => {
-    const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
-    armorTypes.forEach(type => {
-      const armor = bot.inventory.items().find(item => item.name.includes(type));
-      if (armor) bot.equip(armor, type).catch(() => {});
-    });
-    const sword = bot.inventory.items().find(item => item.name.includes('sword'));
-    if (sword) bot.equip(sword, 'hand').catch(() => {});
-  }, 5000);
 
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return;
@@ -81,30 +76,23 @@ function startBot() {
       }
     }
 
-    // 3. BOUNTY SYSTEM
+    // 3. BOUNTY SYSTEM (Fixed with cleanName)
     else if (command === '$hunt') {
-      const targetName = args[1]?.toLowerCase();
+      const targetName = cleanName(args[1]);
       if (!targetName) return bot.chat("Usage: $hunt [player]");
       bountyList.add(targetName);
-      const target = Object.values(bot.entities).find(e => e.username?.toLowerCase() === targetName);
-      if (target) {
-        bot.pathfinder.setGoal(null);
-        bot.pvp.attack(target);
-        bot.chat(`I see you, ${target.username}. Lock acquired.`);
-      } else {
-        bot.chat(`${targetName} added to bounty list. I will strike when seen.`);
-      }
+      bot.chat(`${targetName} is now a priority target.`);
     }
 
     else if (command === '$whitelist') {
-      const targetName = args[1]?.toLowerCase();
+      const targetName = cleanName(args[1]);
       if (bountyList.delete(targetName)) {
-        bot.chat(`${targetName} has been spared.`);
+        bot.chat(`${targetName} removed from list.`);
         bot.pvp.stop();
       }
     }
 
-    // 4. AI ASK (Expanded length)
+    // 4. AI ASK (Fixed Response Structure)
     else if (command === '$ask') {
       const question = args.slice(1).join(' ');
       if (!question) return bot.chat("Ask me a question!");
@@ -112,19 +100,20 @@ function startBot() {
         const completion = await openrouter.chat.completions.create({
           model: "openrouter/auto", 
           messages: [
-            { role: "system", content: "You are CodeBot840, an intelligent anarchy bot. You are allowed to type long, detailed paragraphs. Answer accurately based on context." },
-            { role: "user", content: `Logs: ${chatLogs.join(' | ')}\nQ: ${question}` }
+            { role: "system", content: "You are CodeBot840, an anarchy bot. Answer detailed questions accurately." },
+            { role: "user", content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}` }
           ],
-          max_tokens: 300 // Allows for the "paragraphs" you wanted
+          max_tokens: 300
         });
         
-        const answer = completion.choices?.[0]?.message?.content;
+        // Robust response parsing
+        const answer = completion.choices?.[0]?.message?.content || completion.choices?.[0]?.text;
         if (answer) {
           const cleanAnswer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-          // Minecraft chat max is ~256-320 depending on server. Substring to 250 to stay safe.
           bot.chat(cleanAnswer.substring(0, 250)); 
         }
       } catch (err) {
+        console.log('AI Error:', err.message);
         bot.chat("AI Error. Check logs.");
       }
     }
@@ -135,18 +124,9 @@ function startBot() {
       if (isNaN(x)) return;
       bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z));
     }
-    else if (command === '$coords') {
-      const p = bot.entity.position;
-      bot.chat(`X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
-    }
     else if (command === '$kill') {
       bot.chat('/kill');
     }
-  });
-
-  bot.on('messagestr', (m) => {
-    if (m.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
-    if (m.includes('/login')) bot.chat(`/login ${PASSWORD}`);
   });
 
   bot.on('kicked', () => setTimeout(startBot, 10000));
