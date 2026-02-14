@@ -14,6 +14,11 @@ const PASSWORD = 'YourSecurePassword123';
 let chatLogs = [];
 let bountyList = new Set();
 
+// ===== IGNORE SYSTEM ADDED =====
+let ignoreMode = false;
+const ignoreAllowed = new Set(['player_840', 'chickentender']);
+// ================================
+
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: "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"
@@ -37,7 +42,8 @@ function startBot() {
     const target = Object.values(bot.entities).find(e =>
       e.type === 'player' &&
       e.username &&
-      bountyList.has(e.username.toLowerCase())
+      bountyList.has(e.username.toLowerCase()) &&
+      (!ignoreMode || ignoreAllowed.has(e.username.toLowerCase()))
     );
     if (target) {
       bot.pvp.attack(target);
@@ -58,6 +64,11 @@ function startBot() {
 
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return;
+
+    // ===== IGNORE FILTER ADDED =====
+    if (ignoreMode && !ignoreAllowed.has(username.toLowerCase())) return;
+    // ================================
+
     chatLogs.push(`${username}: ${message}`);
     if (chatLogs.length > 15) chatLogs.shift();
 
@@ -66,7 +77,7 @@ function startBot() {
 
     // 1. HELP (Single Line)
     if (command === '$help') {
-      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $hunt [user], $whitelist [user], $bountylist, $locate [user], $kill');
+      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $hunt [user], $whitelist [user], $bountylist, $locate [user], $kill, $ignore [true/false]');
     }
 
     // 2. REPEAT (2500ms delay)
@@ -104,7 +115,7 @@ function startBot() {
       if (!question) return bot.chat("Ask me a question!");
       try {
         const completion = await openrouter.chat.completions.create({
-          model: "openrouter/auto", // Automatically picks the best available free model
+          model: "openrouter/auto",
           messages: [
             { role: "system", content: "You are CodeBot840. Be extremely brief (max 1000 characters). You are an expert in all minecrft knowledge. Coding and math are following close behind." },
             { role: "user", content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}` }
@@ -113,7 +124,6 @@ function startBot() {
         
         const answer = completion.choices?.[0]?.message?.content;
         if (answer) {
-          // Removes any <think> tags if it picks a DeepSeek model
           const cleanAnswer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
           bot.chat(cleanAnswer.substring(0, 1000));
         } else {
@@ -138,6 +148,23 @@ function startBot() {
     else if (command === '$kill') {
       bot.chat('/kill');
     }
+
+    // ===== IGNORE COMMAND ADDED =====
+    else if (command === '$ignore') {
+      const state = args[1]?.toLowerCase();
+      if (state === 'true') {
+        ignoreMode = true;
+        bot.chat('Ignore mode enabled.');
+      }
+      else if (state === 'false') {
+        ignoreMode = false;
+        bot.chat('Ignore mode disabled.');
+      }
+      else {
+        bot.chat('Usage: $ignore true/false');
+      }
+    }
+    // =================================
   });
 
   bot.on('messagestr', (m) => {
