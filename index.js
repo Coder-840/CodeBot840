@@ -38,7 +38,7 @@ function startBot() {
 
   // AUTO-HUNT (Fixed: Case-insensitive & smarter entity scan)
   setInterval(() => {
-  if (bot.pvp.target) return;
+  if (bot.pvp.target && bot.pvp.target.isValid) return;
 
   const targetPlayer = Object.values(bot.players).find(p =>
     p.entity &&
