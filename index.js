@@ -1,5 +1,4 @@
 const mineflayer = require('mineflayer');
-const authn = require('mineflayer-auto-auth');
 
 const bot = mineflayer.createBot({
   host: 'noBnoT.org',
@@ -8,20 +7,39 @@ const bot = mineflayer.createBot({
   version: '1.8.8'
 });
 
-// Pass the configuration object directly here
-bot.loadPlugin(authn({
-  password: 'YourSecurePassword123',
-  ignoreRepeat: true,
-  logging: true
-}));
+const PASSWORD = 'YourSecurePassword123';
+
+bot.on('chat', (username, message) => {
+  if (username === bot.username) return; // Don't reply to self
+
+  const msg = message.toLowerCase();
+  
+  // Basic Auto-Auth Logic
+  if (msg.includes('/register')) {
+    bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
+  } else if (msg.includes('/login')) {
+    bot.chat(`/login ${PASSWORD}`);
+  }
+});
+
+// Handle messages sent by the server (Action Bars/System Messages)
+bot.on('messagestr', (message) => {
+  console.log('Server:', message);
+  if (message.includes('/register')) {
+    bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
+  } else if (message.includes('/login')) {
+    bot.chat(`/login ${PASSWORD}`);
+  }
+});
 
 bot.on('spawn', () => {
-  console.log('CodeBot840 spawned successfully!');
-  // Wait a few seconds for the auth process to finish before talking
+  console.log('CodeBot840 spawned!');
+  // Wait 5 seconds to ensure we are logged in before saying Hello
   setTimeout(() => {
     bot.chat('Hello');
   }, 5000);
 });
 
-bot.on('error', (err) => console.log('Bot Error:', err));
-bot.on('kicked', (reason) => console.log('Bot Kicked:', reason));
+// Keep-alive and error handling
+bot.on('error', (err) => console.log('Error:', err));
+bot.on('kicked', (reason) => console.log('Kicked:', reason));
