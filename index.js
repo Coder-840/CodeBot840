@@ -5,21 +5,23 @@ const bot = mineflayer.createBot({
   host: 'noBnoT.org',
   port: 25565,
   username: 'CodeBot840',
-  version: '1.8.8' // Forced to 1.8.8 as requested
+  version: '1.8.8'
 });
 
-// Load the auto-auth plugin with a secure password
-bot.loadPlugin(authn);
-bot.autoAuth.password = 'YourSecurePassword123'; 
+// Pass the configuration object directly here
+bot.loadPlugin(authn({
+  password: 'YourSecurePassword123',
+  ignoreRepeat: true,
+  logging: true
+}));
 
 bot.on('spawn', () => {
-  console.log('CodeBot840 has spawned!');
-  // Wait 3 seconds after spawning to ensure the server is ready for chat
+  console.log('CodeBot840 spawned successfully!');
+  // Wait a few seconds for the auth process to finish before talking
   setTimeout(() => {
     bot.chat('Hello');
-  }, 3000);
+  }, 5000);
 });
 
-// Basic error handling to prevent the bot from crashing on Railway
-bot.on('error', (err) => console.log('Error:', err));
-bot.on('kicked', (reason) => console.log('Kicked:', reason));
+bot.on('error', (err) => console.log('Bot Error:', err));
+bot.on('kicked', (reason) => console.log('Bot Kicked:', reason));
