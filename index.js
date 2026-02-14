@@ -1,8 +1,17 @@
 const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
-const { Ollama } = require('ollama');
+const OpenAI = require('openai');
 
-// CONFIGURATION
+// OpenRouter Configuration
+const openrouter = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: "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",
+  defaultHeaders: {
+    "HTTP-Referer": "https://railway.app", // Optional for OpenRouter rankings
+    "X-Title": "CodeBot840"
+  }
+});
+
 const botArgs = {
   host: 'noBnoT.org',
   port: 25565,
@@ -10,93 +19,73 @@ const botArgs = {
   version: '1.8.8'
 };
 const PASSWORD = 'YourSecurePassword123';
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
-const ollama = new Ollama({ host: OLLAMA_URL });
-
-let chatLogs = []; // Stores last 15 messages for AI context
+let chatLogs = [];
 
 function startBot() {
   const bot = mineflayer.createBot(botArgs);
   bot.loadPlugin(pathfinder);
 
-  // --- COMMAND LOGIC ---
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return;
-
-    // Record logs for $ask context
     chatLogs.push(`${username}: ${message}`);
-    if (chatLogs.length > 15) chatLogs.shift();
+    if (chatLogs.length > 10) chatLogs.shift();
 
     const args = message.split(' ');
     const command = args[0].toLowerCase();
 
-    // $help
+    // --- COMMANDS ---
     if (command === '$help') {
       bot.chat('Commands: $coords, $repeat [msg] [count], $goto [x] [y] [z], $ask [question]');
     }
 
-    // $coords
     else if (command === '$coords') {
       const { x, y, z } = bot.entity.position;
-      bot.chat(`Coords: X:${Math.round(x)} Y:${Math.round(y)} Z:${Math.round(z)}`);
+      bot.chat(`X:${Math.round(x)} Y:${Math.round(y)} Z:${Math.round(z)}`);
     }
 
-    // $repeat [msg] [count] (with 1.5s delay to avoid throttle)
     else if (command === '$repeat') {
       const count = Math.min(parseInt(args[args.length - 1]), 10);
       const repeatMsg = args.slice(1, -1).join(' ');
-      if (isNaN(count) || !repeatMsg) return bot.chat('Usage: $repeat hello 3');
-      
       for (let i = 0; i < count; i++) {
         bot.chat(repeatMsg);
-        await new Promise(res => setTimeout(res, 1500)); 
+        await new Promise(r => setTimeout(r, 1500));
       }
     }
 
-    // $goto [x] [y] [z] (will mine blocks in way)
     else if (command === '$goto') {
       const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
-      if (isNaN(x) || isNaN(y) || isNaN(z)) return bot.chat('Usage: $goto 100 64 100');
-
       const mcData = require('minecraft-data')(bot.version);
-      const defaultMove = new Movements(bot, mcData);
-      defaultMove.canDig = true; // Skill: Mining enabled
-      
-      bot.pathfinder.setMovements(defaultMove);
+      const move = new Movements(bot, mcData);
+      move.canDig = true;
+      bot.pathfinder.setMovements(move);
       bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z));
-      bot.chat(`Moving to ${x}, ${y}, ${z}...`);
+      bot.chat(`Walking to ${x} ${y} ${z}...`);
     }
 
-    // $ask [question] (Ollama with History)
     else if (command === '$ask') {
-      const question = args.slice(1).join(' ');
+      const prompt = args.slice(1).join(' ');
       try {
-        const response = await ollama.chat({
-          model: 'gemma3',
+        const completion = await openrouter.chat.completions.create({
+          model: "google/gemini-2.0-flash-lite-preview-02-05:free",
           messages: [
-            { role: 'system', content: 'You are CodeBot840 on a Minecraft server. Keep responses under 100 characters.' },
-            { role: 'user', content: `Chat History:\n${chatLogs.join('\n')}\n\nQuestion: ${question}` }
-          ]
+            { role: "system", content: "You are CodeBot840 on an anarchy server. Be brief." },
+            { role: "user", content: `Logs:\n${chatLogs.join('\n')}\n\nQuestion: ${prompt}` }
+          ],
         });
-        bot.chat(response.message.content.substring(0, 100));
+        bot.chat(completion.choices[0].message.content.substring(0, 100));
       } catch (err) {
-        bot.chat("Ollama API unreachable. Check tunnel!");
+        bot.chat("AI Error - Key might be empty or restricted.");
       }
     }
   });
 
-  // --- CORE LOGIC (Auth/Safety) ---
+  // --- RECONNECT & AUTH ---
   bot.on('messagestr', (msg) => {
     if (msg.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
     if (msg.includes('/login')) bot.chat(`/login ${PASSWORD}`);
   });
-
-  bot.on('spawn', () => console.log('CodeBot840 is online!'));
-  bot.on('kicked', (reason) => {
-    console.log('Kicked:', reason);
-    setTimeout(startBot, 10000); // Reconnect loop
-  });
-  bot.on('error', (err) => setTimeout(startBot, 10000));
+  bot.on('kicked', () => setTimeout(startBot, 10000));
+  bot.on('error', () => setTimeout(startBot, 10000));
 }
 
 startBot();
