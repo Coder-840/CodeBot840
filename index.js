@@ -106,7 +106,7 @@ function startBot() {
         const completion = await openrouter.chat.completions.create({
           model: "openrouter/auto", // Automatically picks the best available free model
           messages: [
-            { role: "system", content: "You are CodeBot840. Be extremely brief (max 100 chars)." },
+            { role: "system", content: "You are CodeBot840. Be extremely brief (max 1000 chars)." },
             { role: "user", content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}` }
           ]
         });
@@ -115,7 +115,7 @@ function startBot() {
         if (answer) {
           // Removes any <think> tags if it picks a DeepSeek model
           const cleanAnswer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-          bot.chat(cleanAnswer.substring(0, 100));
+          bot.chat(cleanAnswer.substring(0, 1000));
         } else {
           bot.chat("AI returned an empty response.");
         }
