@@ -104,26 +104,27 @@ function startBot() {
       if (!question) return bot.chat("Ask me a question!");
       try {
         const completion = await openrouter.chat.completions.create({
-          model: "deepseek/deepseek-r1:free", 
+          model: "openrouter/auto", // Automatically picks the best available free model
           messages: [
-            { role: "system", content: "You are CodeBot840 on an anarchy server. Be brief (max 100 chars)." },
-            { role: "user", content: `Logs: ${chatLogs.join(' | ')}\nQ: ${question}` }
+            { role: "system", content: "You are CodeBot840. Be extremely brief (max 100 chars)." },
+            { role: "user", content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}` }
           ]
         });
         
         const answer = completion.choices?.[0]?.message?.content;
         if (answer) {
-          // Remove DeepSeek "Thinking" tags if they appear in chat
+          // Removes any <think> tags if it picks a DeepSeek model
           const cleanAnswer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
           bot.chat(cleanAnswer.substring(0, 100));
         } else {
-          bot.chat("No response from AI.");
+          bot.chat("AI returned an empty response.");
         }
       } catch (err) {
         console.error("AI Error:", err.message);
-        bot.chat("AI Error. Check logs.");
+        bot.chat("AI Error: Connection failed. Check OpenRouter credits.");
       }
     }
+
 
     // 5. MOVEMENT / UTILITY
     else if (command === '$goto') {
