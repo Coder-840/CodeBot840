@@ -106,7 +106,7 @@ function startBot() {
         const completion = await openrouter.chat.completions.create({
           model: "openrouter/auto", // Automatically picks the best available free model
           messages: [
-            { role: "system", content: "You are CodeBot840. Be extremely brief (max 1000 chars)." },
+            { role: "system", content: "You are CodeBot840. Be extremely brief (max 1000 characters). You are an expert in all minecrft knowledge. Coding and math are following close behind." },
             { role: "user", content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}` }
           ]
         });
