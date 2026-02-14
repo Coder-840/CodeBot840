@@ -64,7 +64,7 @@ function startBot() {
       ];
       for (const line of helpLines) {
         bot.chat(line);
-        await new Promise(r => setTimeout(r, 1600)); 
+        await new Promise(r => setTimeout(r, 2500)); 
       }
     }
 
