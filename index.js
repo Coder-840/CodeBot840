@@ -15,8 +15,8 @@ let chatLogs = [];
 let bountyList = new Set();
 
 const openrouter = new OpenAI({
-  baseURL: "https://openrouter.ai",
-  apiKey: "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"
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: "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"
 });
 
 function startBot() {
@@ -28,24 +28,24 @@ function startBot() {
     const mcData = require('minecraft-data')(bot.version);
     bot.pvp.movements = new Movements(bot, mcData);
     bot.pvp.movements.canDig = true;
-    console.log('CodeBot840 spawned and movement engine initialized.');
+    console.log('CodeBot840 spawned. Combat/Movement ready.');
   });
 
+  // AUTO-HUNT (Fixed: Case-insensitive & smarter entity scan)
   setInterval(() => {
     if (bot.pvp.target) return;
-
     const target = Object.values(bot.entities).find(e =>
       e.type === 'player' &&
       e.username &&
       bountyList.has(e.username.toLowerCase())
     );
-
     if (target) {
       bot.pvp.attack(target);
       bot.chat(`Engaging bounty: ${target.username}!`);
     }
   }, 1000);
 
+  // AUTO-EQUIP
   setInterval(() => {
     const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
     armorTypes.forEach(type => {
@@ -64,10 +64,12 @@ function startBot() {
     const args = message.split(' ');
     const command = args[0].toLowerCase();
 
+    // 1. HELP (Single Line)
     if (command === '$help') {
       bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $hunt [user], $whitelist [user], $bountylist, $locate [user], $kill');
     }
 
+    // 2. REPEAT (2500ms delay)
     else if (command === '$repeat') {
       const count = parseInt(args[args.length - 1]);
       const repeatMsg = args.slice(1, -1).join(' ');
@@ -78,13 +80,13 @@ function startBot() {
       }
     }
 
+    // 3. BOUNTY SYSTEM
     else if (command === '$hunt') {
       const targetName = args[1]?.toLowerCase();
       if (!targetName) return bot.chat("Usage: $hunt [player]");
       bountyList.add(targetName);
       bot.chat(`${targetName} added to bounty list.`);
     }
-
     else if (command === '$whitelist') {
       const targetName = args[1]?.toLowerCase();
       if (bountyList.delete(targetName)) {
@@ -92,52 +94,38 @@ function startBot() {
         bot.pvp.stop();
       }
     }
-
     else if (command === '$bountylist') {
       bot.chat(`Targets: ${Array.from(bountyList).join(', ') || 'None'}`);
     }
 
+    // 4. AI ASK (Fixed for DeepSeek R1 Free)
     else if (command === '$ask') {
       const question = args.slice(1).join(' ');
       if (!question) return bot.chat("Ask me a question!");
-      
       try {
-        console.log(`AI Request: ${question}`); // Debugging
-        
         const completion = await openrouter.chat.completions.create({
-          model: "google/gemini-2.0-flash-lite-preview-02-05:free",
+          model: "deepseek/deepseek-r1:free", 
           messages: [
-            { role: "system", content: "You are CodeBot840. Be extremely brief (max 100 chars)." },
-            { role: "user", content: `Context: ${chatLogs.join(' | ')}\n\nQuestion: ${question}` }
+            { role: "system", content: "You are CodeBot840 on an anarchy server. Be brief (max 100 chars)." },
+            { role: "user", content: `Logs: ${chatLogs.join(' | ')}\nQ: ${question}` }
           ]
         });
-
-        // DEBUG: See the raw response in Railway logs
-        console.log('OpenRouter Full Response:', JSON.stringify(completion, null, 2));
-
-        // The correct path for OpenRouter / OpenAI SDK v4+
-        const answer = completion.choices?.[0]?.message?.content || completion.choices?.[0]?.text;
-
+        
+        const answer = completion.choices?.[0]?.message?.content;
         if (answer) {
-          bot.chat(answer.trim().substring(0, 100));
+          // Remove DeepSeek "Thinking" tags if they appear in chat
+          const cleanAnswer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+          bot.chat(cleanAnswer.substring(0, 100));
         } else {
-          bot.chat("AI returned an empty response. Check Railway logs.");
+          bot.chat("No response from AI.");
         }
       } catch (err) {
-        // Detailed error logging
-        console.error("OpenRouter API Error:", err.message);
-        
-        if (err.message.includes('402')) {
-          bot.chat("AI Error: No credits or key restricted.");
-        } else if (err.message.includes('401')) {
-          bot.chat("AI Error: Invalid API Key.");
-        } else {
-          bot.chat(`AI Error: ${err.message.substring(0, 30)}`);
-        }
+        console.error("AI Error:", err.message);
+        bot.chat("AI Error. Check logs.");
       }
     }
 
-
+    // 5. MOVEMENT / UTILITY
     else if (command === '$goto') {
       const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
       if (isNaN(x)) return;
@@ -145,7 +133,7 @@ function startBot() {
     }
     else if (command === '$coords') {
       const p = bot.entity.position;
-      bot.chat(`Coords: ${Math.round(p.x)} ${Math.round(p.y)} ${Math.round(p.z)}`);
+      bot.chat(`I am at X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
     }
     else if (command === '$kill') {
       bot.chat('/kill');
