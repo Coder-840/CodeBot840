@@ -1,3 +1,1 @@
-quarry
-twisted
-service_identity
+lodestone
