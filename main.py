@@ -1,10 +1,13 @@
-import os
 from quarry.net.client import ClientFactory, ClientProtocol
 from twisted.internet import reactor
 
-SERVER = os.getenv("MC_SERVER")
-PORT = int(os.getenv("MC_PORT", 25565))
-USERNAME = os.getenv("MC_USERNAME", "RailwayBot")
+# =========================
+# HARD-CODED SETTINGS
+# =========================
+SERVER = "noBnoT.org"
+PORT = 25565
+USERNAME = "CodeBot840"
+
 
 class Bot(ClientProtocol):
 
@@ -13,10 +16,10 @@ class Bot(ClientProtocol):
         print("CHAT:", msg)
 
         if "hello" in msg.lower():
-            self.send_chat("Hello from Railway 👋")
+            self.send_chat("Hello 👋 I am a Python bot.")
 
         if "who" in msg.lower():
-            self.send_chat("I'm a Python bot running 24/7.")
+            self.send_chat("I am running on Railway 24/7.")
 
     def send_chat(self, message):
         self.send_packet("chat_message", self.buff_type.pack_string(message))
