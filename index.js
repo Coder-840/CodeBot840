@@ -15,7 +15,7 @@ let chatLogs = [];
 let bountyList = new Set();
 
 // --- SECURITY SETTINGS ---
-let ignoreOthers = true; // Default to TRUE so strangers can't mess with it
+let ignoreOthers = true; 
 const whiteList = new Set(['player_840', 'chickentender']); 
 
 const openrouter = new OpenAI({
@@ -30,13 +30,15 @@ function startBot() {
   bot.loadPlugin(pathfinder);
   bot.loadPlugin(pvp);
 
+  bot.on('login', () => setTimeout(() => bot.chat('/play'), 2000));
+
   bot.once('spawn', () => {
     const mcData = require('minecraft-data')(bot.version);
     const moves = new Movements(bot, mcData);
     moves.canDig = true;
     bot.pathfinder.setMovements(moves);
     bot.pvp.movements = moves;
-    console.log('CodeBot840 Online. Security: ' + (ignoreOthers ? 'Whitelisted Only' : 'Public'));
+    console.log('CodeBot840 Online.');
   });
 
   // AUTO-HUNT
@@ -55,101 +57,89 @@ function startBot() {
     const sender = cleanName(username);
     if (sender === cleanName(bot.username)) return;
 
-    // 1. SECURITY CHECK
-    if (ignoreOthers && !whiteList.has(sender)) {
-        // If a stranger tries to use a command, bot ignores it
-        if (message.startsWith('$')) return; 
-        
-        // Still log their chat for AI context though
-        chatLogs.push(`${username}: ${message}`);
-        if (chatLogs.length > 15) chatLogs.shift();
-        return;
-    }
-
-    // Process logs for whitelisted users
+    // ALWAYS log chat so AI has context, regardless of whitelist
     chatLogs.push(`${username}: ${message}`);
-    if (chatLogs.length > 15) chatLogs.shift();
+    if (chatLogs.length > 20) chatLogs.shift();
+
+    // SECURITY: If message is a command, check whitelist
+    if (message.startsWith('$')) {
+      if (ignoreOthers && !whiteList.has(sender)) return; // SILENTLY ignore strangers
+    } else {
+      return; // Not a command, stop processing
+    }
 
     const args = message.split(' ');
     const command = args[0].toLowerCase();
 
-    // 2. NEW COMMAND: $ignore true/false
+    // COMMAND: $ignore
     if (command === '$ignore') {
       const mode = args[1]?.toLowerCase();
-      if (mode === 'true') {
-        ignoreOthers = true;
-        bot.chat("Security Enabled: I will only listen to my masters.");
-      } else if (mode === 'false') {
-        ignoreOthers = false;
-        bot.chat("Security Disabled: I am now public property.");
-      } else {
-        bot.chat(`Current Status: Ignore Others is ${ignoreOthers}`);
-      }
+      if (mode === 'true') { ignoreOthers = true; bot.chat("Security: ON"); }
+      else if (mode === 'false') { ignoreOthers = false; bot.chat("Security: OFF"); }
     }
 
-    // --- REST OF COMMANDS ---
-    else if (command === '$help') {
-      bot.chat('Commands: $ignore [t/f], $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $hunt [user], $whitelist [user], $kill');
-    }
-
-    else if (command === '$repeat') {
-      const count = parseInt(args[args.length - 1]);
-      const repeatMsg = args.slice(1, -1).join(' ');
-      if (isNaN(count)) return;
-      for (let i = 0; i < count; i++) {
-        bot.chat(repeatMsg);
-        await new Promise(r => setTimeout(r, 2500));
-      }
-    }
-
-    else if (command === '$hunt') {
-      const targetName = args[1]?.toLowerCase();
-      if (!targetName) return bot.chat("Usage: $hunt [player]");
-      bountyList.add(targetName);
-      bot.chat(`${targetName} added to bounty list.`);
-    }
-
+    // COMMAND: $ask (Fixed Structure)
     else if (command === '$ask') {
       const question = args.slice(1).join(' ');
-      if (!question) return bot.chat("Ask me a question!");
+      if (!question) return bot.chat("Ask me something!");
+      
       try {
         const completion = await openrouter.chat.completions.create({
           model: "openrouter/auto",
           messages: [
-            { role: "system", content: "You are CodeBot840. Provide detailed paragraphs if asked." },
-            { role: "user", content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}` }
+            { role: "system", content: "You are CodeBot840. Provide detailed paragraphs. Max 1000 chars." },
+            { role: "user", content: `Context logs:\n${chatLogs.join('\n')}\n\nQuestion: ${question}` }
           ]
         });
+
         const answer = completion.choices?.[0]?.message?.content;
         if (answer) {
           const cleanAnswer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+          // Split into 200 char chunks for MC chat
           const chunks = cleanAnswer.match(/.{1,200}(\s|$)/g) || [cleanAnswer];
           for (const chunk of chunks) {
             bot.chat(chunk.trim());
             await new Promise(r => setTimeout(r, 1200));
           }
+        } else {
+          bot.chat("AI returned empty.");
         }
-      } catch (err) { bot.chat("AI Error."); }
+      } catch (err) {
+        bot.chat("AI Error.");
+        console.error(err);
+      }
     }
 
+    // COMMAND: $hunt
+    else if (command === '$hunt') {
+      const target = args[1]?.toLowerCase();
+      if (target) {
+        bountyList.add(target);
+        bot.chat(`${target} added to kill list.`);
+      }
+    }
+
+    // COMMAND: $goto
     else if (command === '$goto') {
       const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
       if (!isNaN(x)) bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z));
     }
 
+    // COMMAND: $coords
     else if (command === '$coords') {
       const p = bot.entity.position;
-      bot.chat(`I am at X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
+      bot.chat(`X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
     }
 
+    // COMMAND: $kill
     else if (command === '$kill') {
       bot.chat('/kill');
     }
-  });
-
-  bot.on('messagestr', (m) => {
-    if (m.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
-    if (m.includes('/login')) bot.chat(`/login ${PASSWORD}`);
+    
+    // COMMAND: $help
+    else if (command === '$help') {
+        bot.chat('Commands: $ignore [t/f], $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $hunt [user], $kill');
+    }
   });
 
   bot.on('kicked', () => setTimeout(startBot, 10000));
