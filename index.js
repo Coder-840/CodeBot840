@@ -21,19 +21,30 @@ const openrouter = new OpenAI({
 
 function startBot() {
   const bot = mineflayer.createBot(botArgs);
+  
+  // 1. Load your plugins
   bot.loadPlugin(pathfinder);
   bot.loadPlugin(pvp);
 
-  // Skill: Clean color codes from names (Required for Anarchy servers)
-  const cleanName = (name) => name ? name.replace(/§[0-9a-fk-or]/gi, '').toLowerCase() : '';
+  // 2. Add the Ghost Killer / Lobby Redirect fix here
+  bot.on('login', () => {
+    console.log('CodeBot840 connected to the login proxy.');
+    // Small delay to let the lobby load, then try to enter the world
+    setTimeout(() => {
+      // noBnoT often uses /play or just walking through a portal. 
+      // This command forces the server to move you if you're stuck.
+      bot.chat('/play'); 
+    }, 2000);
+  });
 
+  // 3. Movement and Combat Initialization
   bot.once('spawn', () => {
     const mcData = require('minecraft-data')(bot.version);
     const moves = new Movements(bot, mcData);
     moves.canDig = true;
     bot.pathfinder.setMovements(moves);
     bot.pvp.movements = moves;
-    console.log('--- CodeBot840: Online & Lethal ---');
+    console.log('--- CodeBot840: Spawned in World ---');
   });
 
   // AUTO-HUNT SCANNER (Fixed with Clean Names)
