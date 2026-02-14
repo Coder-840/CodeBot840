@@ -1,12 +1,20 @@
 {
   "name": "codebot840",
   "version": "1.0.0",
+  "description": "Anarchy bot with AI, Pathfinding, and Combat",
   "main": "index.js",
-  "scripts": { "start": "node index.js" },
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
     "mineflayer": "^4.20.0",
     "mineflayer-pathfinder": "^2.4.0",
+    "mineflayer-pvp": "^1.2.0",
     "minecraft-data": "^3.0.0",
-    "openai": "^4.0.0"
+    "openai": "^4.28.0",
+    "axios": "^1.6.7"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
