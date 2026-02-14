@@ -3,7 +3,7 @@ const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const pvp = require('mineflayer-pvp').plugin;
 const OpenAI = require('openai');
 
-// 1. Move helper functions to the TOP (Global Scope)
+// Helper at top scope
 const cleanName = (name) => name ? name.replace(/§[0-9a-fk-or]/gi, '').toLowerCase() : '';
 
 const botArgs = {
@@ -27,12 +27,9 @@ function startBot() {
   bot.loadPlugin(pathfinder);
   bot.loadPlugin(pvp);
 
-  // GHOST KILLER / LOBBY REDIRECT
   bot.on('login', () => {
-    console.log('CodeBot840 connected to proxy.');
-    setTimeout(() => {
-      bot.chat('/play'); 
-    }, 2000);
+    console.log('Connected to proxy.');
+    setTimeout(() => bot.chat('/play'), 2000);
   });
 
   bot.once('spawn', () => {
@@ -41,10 +38,10 @@ function startBot() {
     moves.canDig = true;
     bot.pathfinder.setMovements(moves);
     bot.pvp.movements = moves;
-    console.log('--- CodeBot840: Online & Ready ---');
+    console.log('CodeBot840: Spawned');
   });
 
-  // AUTO-HUNT SCANNER (Fixed ReferenceError)
+  // AUTO-HUNT SCANNER
   setInterval(() => {
     if (bot.pvp.target) return;
     const target = Object.values(bot.entities).find(e => {
@@ -55,20 +52,9 @@ function startBot() {
     if (target) {
       bot.pathfinder.setGoal(null);
       bot.pvp.attack(target);
-      bot.chat(`Target locked: ${cleanName(target.username)}. Ready for combat.`);
+      bot.chat(`Engaging bounty: ${cleanName(target.username)}`);
     }
   }, 1000);
-
-  // AUTO-EQUIP
-  setInterval(() => {
-    const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
-    armorTypes.forEach(type => {
-      const armor = bot.inventory.items().find(item => item.name.includes(type));
-      if (armor) bot.equip(armor, type).catch(() => {});
-    });
-    const sword = bot.inventory.items().find(item => item.name.includes('sword'));
-    if (sword) bot.equip(sword, 'hand').catch(() => {});
-  }, 5000);
 
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return;
@@ -92,17 +78,24 @@ function startBot() {
       }
     }
 
+    // FIXED $hunt - Grabs the username correctly
     else if (command === '$hunt') {
       const targetName = cleanName(args[1]);
       if (!targetName) return bot.chat("Usage: $hunt [player]");
       bountyList.add(targetName);
-      bot.chat(`${targetName} marked for termination.`);
+      bot.chat(`${targetName} added to bounty list.`);
+      
+      const target = Object.values(bot.entities).find(e => cleanName(e.username) === targetName);
+      if (target) {
+        bot.pathfinder.setGoal(null);
+        bot.pvp.attack(target);
+      }
     }
 
     else if (command === '$whitelist') {
       const targetName = cleanName(args[1]);
       if (bountyList.delete(targetName)) {
-        bot.chat(`${targetName} removed from list.`);
+        bot.chat(`${targetName} spared.`);
         bot.pvp.stop();
       }
     }
@@ -111,23 +104,29 @@ function startBot() {
       bot.chat(`Targets: ${Array.from(bountyList).join(', ') || 'None'}`);
     }
 
+    // REVERTED TO YOUR WORKING $ASK VERSION
     else if (command === '$ask') {
       const question = args.slice(1).join(' ');
       if (!question) return bot.chat("Ask me a question!");
       try {
         const completion = await openrouter.chat.completions.create({
-          model: "openrouter/auto", 
+          model: "openrouter/auto",
           messages: [
-            { role: "system", content: "You are CodeBot840. Be extremely brief (max 200 chars)." },
+            { role: "system", content: "You are CodeBot840. Be extremely brief (max 100 chars)." },
             { role: "user", content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}` }
           ]
         });
-        const answer = completion.choices?.[0]?.message?.content || completion.choices?.[0]?.text;
+        
+        const answer = completion.choices?.[0]?.message?.content;
         if (answer) {
-          bot.chat(answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim().substring(0, 250)); 
+          const cleanAnswer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+          bot.chat(cleanAnswer.substring(0, 100));
+        } else {
+          bot.chat("AI returned an empty response.");
         }
       } catch (err) {
-        bot.chat("AI Error.");
+        console.error("AI Error:", err.message);
+        bot.chat("AI Error: Check logs.");
       }
     }
 
