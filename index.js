@@ -80,14 +80,14 @@ function startBot() {
       bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $hunt [user], $whitelist [user], $bountylist, $locate [user], $kill, $ignore [true/false]');
     }
 
-    // 2. REPEAT (2500ms delay)
+    // 2. REPEAT (2000ms delay)
     else if (command === '$repeat') {
       const count = parseInt(args[args.length - 1]);
       const repeatMsg = args.slice(1, -1).join(' ');
       if (isNaN(count)) return;
       for (let i = 0; i < count; i++) {
         bot.chat(repeatMsg);
-        await new Promise(r => setTimeout(r, 2500));
+        await new Promise(r => setTimeout(r, 2000));
       }
     }
 
@@ -115,7 +115,7 @@ function startBot() {
   if (!question) return bot.chat("Ask me a question!");
 
   try {
-    // Use the last 30 console messages as context
+    // Use the last 30 messages from chatLogs as context
     const context = chatLogs.slice(-30).join(' | ');
 
     const completion = await openrouter.chat.completions.create({
@@ -123,11 +123,11 @@ function startBot() {
       messages: [
         {
           role: "system",
-          content: "You are CodeBot840, a server-aware bot. Be concise, informative, and relate answers to the server messages if possible (max is 256 characters per paragraph) but if there isn't anything in the server to help, just use outside knowledge. Remember, not all questions are directly answered in chat logs. For example, if asked for a player's IQ, the chat logs obviously won't just say. But you can assume based on how the person talks. You are an expert in all minecraft knowledge, coding, and math."
+          content: "You are CodeBot840, a server-aware bot. Be concise, informative, and relate answers to the server messages if possible (max 256 characters per paragraph). If the server logs do not provide enough info, use outside knowledge. You are an expert in Minecraft, coding, and math. You can infer details about players from chat if needed."
         },
         {
           role: "user",
-          content: `Server messages: ${context}\nQuestion: ${question}`
+          content: `Server messages with usernames: ${context}\nQuestion: ${question}`
         }
       ]
     });
@@ -135,21 +135,23 @@ function startBot() {
     let answer = completion.choices?.[0]?.message?.content || '';
     answer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
-    if (answer.length === 0) {
+    if (!answer) {
       bot.chat("AI returned an empty response.");
       return;
     }
 
-    // Split into paragraphs and 256-char chunks
+    // Split into paragraphs
     const paragraphs = answer.split(/\r?\n/);
     for (let para of paragraphs) {
       para = para.trim();
       if (!para) continue;
+
+      // Split long paragraphs into 256-char chunks
       while (para.length > 0) {
         const chunk = para.substring(0, 256);
         bot.chat(chunk);
         para = para.substring(256);
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 500)); // small delay to avoid spam
       }
     }
   } catch (err) {
