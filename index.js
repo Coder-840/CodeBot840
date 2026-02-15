@@ -13,11 +13,8 @@ const botArgs = {
 const PASSWORD = 'YourSecurePassword123';
 let chatLogs = [];
 let bountyList = new Set();
-
-// ===== IGNORE SYSTEM =====
 let ignoreMode = true;
 const ignoreAllowed = new Set(['player_840', 'chickentender']);
-// ========================
 
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -36,11 +33,11 @@ function startBot() {
     console.log('CodeBot840 spawned. Combat/Movement ready.');
   });
 
-  // ===== AUTO-HUNT INTERVAL =====
-  setInterval(() => {
-    if (bot.pvp.target && bot.pvp.target.isValid) return; // already attacking valid target
+  // ===== AUTO-HUNT (robust, physicsTick) =====
+  bot.on('physicsTick', () => {
+    if (bot.pvp.target && bot.pvp.target.isValid) return;
 
-    const target = Object.values(bot.entities).find(e =>
+    const target = bot.nearestEntity(e =>
       e.type === 'player' &&
       e.username &&
       bountyList.has(e.username.toLowerCase())
@@ -50,7 +47,7 @@ function startBot() {
       bot.pvp.attack(target);
       bot.chat(`Engaging bounty target: ${target.username}!`);
     }
-  }, 1000);
+  });
 
   // ===== AUTO-EQUIP =====
   setInterval(() => {
@@ -67,7 +64,6 @@ function startBot() {
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return;
 
-    // Always log all chat
     chatLogs.push(`${username}: ${message}`);
     if (chatLogs.length > 100) chatLogs.shift();
     console.log(`${username}: ${message}`);
@@ -75,13 +71,13 @@ function startBot() {
     const args = message.split(' ');
     const command = args[0].toLowerCase();
 
-    // Ignore mode affects only commands, not logging
+    // Ignore mode affects only commands
     const canInteract = !ignoreMode || ignoreAllowed.has(username.toLowerCase());
     if (!canInteract && command.startsWith('$')) return;
 
     // ===== COMMANDS =====
     if (command === '$help') {
-      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $hunt [user], $whitelist [user], $bountylist, $locate [user], $kill, $ignore [true/false]');
+      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $hunt [user], $whitelist [user], $bountylist, $kill, $ignore [true/false]');
     }
 
     else if (command === '$repeat') {
@@ -94,7 +90,6 @@ function startBot() {
       }
     }
 
-    // ===== $HUNT COMMAND =====
     else if (command === '$hunt') {
       const targetName = args[1]?.toLowerCase();
       if (!targetName) {
@@ -102,27 +97,9 @@ function startBot() {
         return;
       }
 
-      if (bountyList.has(targetName)) {
-        bot.chat(`${targetName} is already on the bounty list.`);
-        return;
-      }
-
       bountyList.add(targetName);
       chatLogs.push(`SERVER: ${targetName} added to bounty list`);
       bot.chat(`${targetName} added to bounty list.`);
-
-      // Immediately attack if nearby
-      const targetEntity = Object.values(bot.entities).find(e =>
-        e.type === 'player' &&
-        e.username?.toLowerCase() === targetName
-      );
-
-      if (targetEntity) {
-        bot.pvp.attack(targetEntity);
-        bot.chat(`Engaging bounty target: ${targetName}!`);
-      } else {
-        bot.chat(`Target ${targetName} not found nearby. Auto-hunt will engage when they appear.`);
-      }
     }
 
     else if (command === '$whitelist') {
