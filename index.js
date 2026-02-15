@@ -141,7 +141,15 @@ else if (command === '$ask') {
         .replace(/^[^a-zA-Z0-9]+/, '')
         .trim();
 
-      bot.chat("AI: " + clean.substring(0, 240));
+      function sendLongMessage(msg, prefix = "") {
+    const max = 256; // safe size for all servers
+    for (let i = 0; i < msg.length; i += max) {
+      bot.chat(prefix + msg.substring(i, i + max));
+      prefix = ""; // only first line gets prefix
+    }
+  }
+
+sendLongMessage(clean, "");
     } else {
       bot.chat("AI returned empty response.");
     }
