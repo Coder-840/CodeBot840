@@ -130,8 +130,6 @@ function startBot() {
     }
   ]
 });
-
-        });
         
         const answer = completion.choices?.[0]?.message?.content;
         if (answer) {
