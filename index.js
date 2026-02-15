@@ -12,7 +12,6 @@ const botArgs = {
 
 const PASSWORD = 'YourSecurePassword123';
 let chatLogs = [];
-let bountyList = new Set();
 let ignoreMode = true;
 const ignoreAllowed = new Set(['player_840', 'chickentender']);
 
@@ -33,22 +32,6 @@ function startBot() {
     console.log('CodeBot840 spawned. Combat/Movement ready.');
   });
 
-  // ===== AUTO-HUNT (robust, physicsTick) =====
-  bot.on('physicsTick', () => {
-    if (bot.pvp.target && bot.pvp.target.isValid) return;
-
-    const target = bot.nearestEntity(e =>
-      e.type === 'player' &&
-      e.username &&
-      bountyList.has(e.username.toLowerCase())
-    );
-
-    if (target) {
-      bot.pvp.attack(target);
-      bot.chat(`Engaging bounty target: ${target.username}!`);
-    }
-  });
-
   // ===== AUTO-EQUIP =====
   setInterval(() => {
     const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
@@ -64,6 +47,7 @@ function startBot() {
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return;
 
+    // Always log all chat for AI
     chatLogs.push(`${username}: ${message}`);
     if (chatLogs.length > 100) chatLogs.shift();
     console.log(`${username}: ${message}`);
@@ -77,7 +61,7 @@ function startBot() {
 
     // ===== COMMANDS =====
     if (command === '$help') {
-      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $hunt [user], $whitelist [user], $bountylist, $kill, $ignore [true/false]');
+      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false]');
     }
 
     else if (command === '$repeat') {
@@ -88,31 +72,6 @@ function startBot() {
         bot.chat(repeatMsg);
         await new Promise(r => setTimeout(r, 2000));
       }
-    }
-
-    else if (command === '$hunt') {
-      const targetName = args[1]?.toLowerCase();
-      if (!targetName) {
-        bot.chat("Usage: $hunt [player]");
-        return;
-      }
-
-      bountyList.add(targetName);
-      chatLogs.push(`SERVER: ${targetName} added to bounty list`);
-      bot.chat(`${targetName} added to bounty list.`);
-    }
-
-    else if (command === '$whitelist') {
-      const targetName = args[1]?.toLowerCase();
-      if (bountyList.delete(targetName)) {
-        chatLogs.push(`SERVER: ${targetName} removed from bounty list`);
-        bot.chat(`${targetName} pardoned.`);
-        if (bot.pvp.target?.username?.toLowerCase() === targetName) bot.pvp.stop();
-      }
-    }
-
-    else if (command === '$bountylist') {
-      bot.chat(`Targets: ${Array.from(bountyList).join(', ') || 'None'}`);
     }
 
     // ===== SERVER-AWARE $ASK =====
@@ -128,11 +87,11 @@ function startBot() {
           messages: [
             {
               role: "system",
-              content: `You are CodeBot840, a fully server-aware bot. Be concise and informative. Use last server messages (chat, deaths, joins, bounties) to answer if possible, max 240 characters per paragraph. Always answer player questions using outside knowledge if logs don't provide enough info. You are an expert in Minecraft, coding, and math.`
+              content: `You are CodeBot840, a fully server-aware bot. Be concise and informative. Use last server messages (chat, deaths, joins) to answer if possible, max 240 characters per paragraph. Always answer player questions using outside knowledge if logs don't provide enough info. You are an expert in Minecraft, coding, and math.`
             },
             {
               role: "user",
-              content: `Server messages (players + server events + bounties): ${context}\nQuestion: ${question}`
+              content: `Server messages (players + server events): ${context}\nQuestion: ${question}`
             }
           ]
         });
