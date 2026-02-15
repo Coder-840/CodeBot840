@@ -111,20 +111,19 @@ function startBot() {
     }
 
     // 4. AI ASK (Fixed for DeepSeek R1 Free)
-    // 4. AI ASK
-else if (command === '$ask') {
+      else if (command === '$ask') {
   const question = args.slice(1).join(' ');
   if (!question) return bot.chat("Ask me a question!");
 
   try {
     const completion = await openrouter.chat.completions.create({
       model: "openrouter/auto",
-      max_tokens: 3000,
+      max_tokens: 500, // allows a fuller answer
       temperature: 0.7,
       messages: [
         {
           role: "system",
-          content: "You are CodeBot840. Give clear complete answers under 240 characters. Expert in Minecraft, coding, and math."
+          content: "You are CodeBot840. Give clear answers. You are an expert in Minecraft, coding, and math."
         },
         {
           role: "user",
@@ -134,31 +133,22 @@ else if (command === '$ask') {
     });
 
     const answer = completion.choices?.[0]?.message?.content;
-
     if (answer) {
-      const clean = answer
-        .replace(/<think>[\s\S]*?<\/think>/g, '')
-        .replace(/^[^a-zA-Z0-9]+/, '')
-        .trim();
+      const clean = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
-      function sendLongMessage(msg, prefix = "") {
-    const max = 256; // safe size for all servers
-    for (let i = 0; i < msg.length; i += max) {
-      bot.chat(prefix + msg.substring(i, i + max));
-      prefix = ""; // only first line gets prefix
-    }
-  }
-
-sendLongMessage(clean, "");
+      // Split into chunks if over 256 characters
+      for (let i = 0; i < clean.length; i += 256) {
+        bot.chat(clean.substring(i, i + 256));
+      }
     } else {
-      bot.chat("AI returned empty response.");
+      bot.chat("AI returned an empty response.");
     }
-
   } catch (err) {
     console.error("AI Error:", err.message);
     bot.chat("AI Error. Check API or credits.");
   }
 }
+
 
     // 5. MOVEMENT / UTILITY
     else if (command === '$goto') {
