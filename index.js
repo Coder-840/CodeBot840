@@ -123,7 +123,7 @@ function startBot() {
       messages: [
         {
           role: "system",
-          content: "You are CodeBot840, a server-aware bot. Be concise, informative, and relate answers to the server messages if possible (max is 256 characters per paragraph) but if there isn't anything in the server to help, just use outside knowledge. You are an expert in all minecraft knowledge, coding, and math."
+          content: "You are CodeBot840, a server-aware bot. Be concise, informative, and relate answers to the server messages if possible (max is 256 characters per paragraph) but if there isn't anything in the server to help, just use outside knowledge. Remember, not all questions are directly answered in chat logs. For example, if asked for a player's IQ, the chat logs obviously won't just say. But you can assume based on how the person talks. You are an expert in all minecraft knowledge, coding, and math."
         },
         {
           role: "user",
