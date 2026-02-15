@@ -34,18 +34,55 @@ function startBot() {
   });
 
   // ===== AUTO-HUNT =====
+  // ===== AUTO-HUNT INTERVAL =====
 setInterval(() => {
-  if (bot.pvp.target) return;
+  if (bot.pvp.target && bot.pvp.target.isValid) return; // already attacking valid target
+
+  // Look for any bounty target nearby
   const target = Object.values(bot.entities).find(e =>
     e.type === 'player' &&
     e.username &&
     bountyList.has(e.username.toLowerCase())
   );
+
   if (target) {
     bot.pvp.attack(target);
-    bot.chat(`Engaging bounty: ${target.username}!`);
+    bot.chat(`Engaging bounty target: ${target.username}!`);
   }
 }, 1000);
+
+// ===== $HUNT COMMAND =====
+else if (command === '$hunt') {
+  const targetName = args[1]?.toLowerCase();
+  if (!targetName) {
+    bot.chat("Usage: $hunt [player]");
+    return;
+  }
+
+  if (bountyList.has(targetName)) {
+    bot.chat(`${targetName} is already on the bounty list.`);
+    return;
+  }
+
+  // Add to bounty list
+  bountyList.add(targetName);
+  chatLogs.push(`SERVER: ${targetName} added to bounty list`);
+  bot.chat(`${targetName} added to bounty list.`);
+
+  // Immediately try to attack if the player is nearby
+  const targetEntity = Object.values(bot.entities).find(e =>
+    e.type === 'player' &&
+    e.username?.toLowerCase() === targetName
+  );
+
+  if (targetEntity) {
+    bot.pvp.attack(targetEntity);
+    bot.chat(`Engaging bounty target: ${targetName}!`);
+  } else {
+    bot.chat(`Target ${targetName} not found nearby. Auto-hunt will engage when they appear.`);
+  }
+}
+
 
 
   // ===== AUTO-EQUIP =====
