@@ -111,30 +111,7 @@ function startBot() {
     }
 
     // 4. AI ASK (Fixed for DeepSeek R1 Free)
-    else if (command === '$ask') {
-      const question = args.slice(1).join(' ');
-      if (!question) return bot.chat("Ask me a question!");
-      try {
-       const completion = await openrouter.chat.completions.create({
-    model: "openrouter/auto",
-    max_tokens: 10000,
-    temperature: 0.7,
-    messages: [
-    {
-      role: "system",
-      content: "You are CodeBot840. Give clear, complete answers but keep them under 240 characters. You are an expert in all minecraft knowledge. Right behind that omes coding and math."
-    },
-    {
-      role: "user",
-      content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}`
-    }
-  ]
-});
-        
-        const answer = completion.choices?.[0]?.message?.content;
-        if (answer) {
-              // 4. AI ASK (Fixed for DeepSeek R1 Free)
-          // 4. AI ASK
+    // 4. AI ASK
 else if (command === '$ask') {
   const question = args.slice(1).join(' ');
   if (!question) return bot.chat("Ask me a question!");
@@ -142,7 +119,7 @@ else if (command === '$ask') {
   try {
     const completion = await openrouter.chat.completions.create({
       model: "openrouter/auto",
-      max_tokens: 300,
+      max_tokens: 3000,
       temperature: 0.7,
       messages: [
         {
@@ -174,7 +151,6 @@ else if (command === '$ask') {
     bot.chat("AI Error. Check API or credits.");
   }
 }
-
 
     // 5. MOVEMENT / UTILITY
     else if (command === '$goto') {
