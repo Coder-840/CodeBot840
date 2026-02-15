@@ -118,7 +118,7 @@ function startBot() {
   try {
     const completion = await openrouter.chat.completions.create({
       model: "openrouter/auto",
-      max_tokens: 300,       // reasonable for chat
+      max_tokens: 300,
       temperature: 0.7,
       messages: [
         {
@@ -132,9 +132,12 @@ function startBot() {
       ]
     });
 
+    console.log("Raw OpenRouter response:", completion); // 🔍 log everything
+
     const answer = completion.choices?.[0]?.message?.content;
+
     if (!answer || answer.trim().length === 0) {
-      bot.chat("AI returned an empty response. Try rephrasing.");
+      bot.chat("AI returned an empty response. Check console logs.");
       return;
     }
 
@@ -144,12 +147,10 @@ function startBot() {
     }
 
   } catch (err) {
-    console.error("AI Error:", err);
-    bot.chat("AI Error. Check API key, credits, or network.");
+    console.error("AI Error:", err); // log full error object
+    bot.chat("AI Error. Check API key, credits, or network. See console for details.");
   }
 }
-
-
 
     // 5. MOVEMENT / UTILITY
     else if (command === '$goto') {
