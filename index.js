@@ -110,24 +110,25 @@ function startBot() {
     }
 
     // 4. AI ASK (Fixed for DeepSeek R1 Free)
-      else if (command === '$ask') {
+      // 4. AI ASK (Server-aware)
+else if (command === '$ask') {
   const question = args.slice(1).join(' ');
   if (!question) return bot.chat("Ask me a question!");
 
   try {
-    // Use the last 30 messages from chatLogs as context
-    const context = chatLogs.slice(-30).join(' | ');
+    // Use the last 50 messages from chatLogs (player + server messages) as context
+    const context = chatLogs.slice(-50).join(' | ');
 
     const completion = await openrouter.chat.completions.create({
       model: "openrouter/auto",
       messages: [
         {
           role: "system",
-          content: "You are CodeBot840, a server-aware bot. Be concise, informative, and relate answers to the server messages if possible (max 240 characters per paragraph. YOU CANNOT GO BEYOND.). Your goal is to be helpful, and provide whatever info that players ask for, not to judge and decide what is worth answering and what is not. If the server logs do not provide enough info, use outside knowledge. You are an expert in Minecraft, coding, and math. You can infer details about players from chat if needed. Remember, using server chat logs is not always required. For example, if asked about how to kill a warden, you wouldn't have to mention the chat logs at all unless someone actually mentioned how to kill a warden."
+          content: "You are CodeBot840, a server-aware bot. Be concise, informative, and relate answers to the server messages if possible (max 240 characters per paragraph — DO NOT exceed). Your goal is to answer any player question, not judge what is worth answering. Use outside knowledge if server logs don't provide enough info. You are an expert in Minecraft, coding, and math. You can infer details about players from chat if needed. You do not always have to mention the chat if the the logs did not mention anything related to the question."
         },
         {
           role: "user",
-          content: `Server messages with usernames: ${context}\nQuestion: ${question}`
+          content: `Server messages (players + server events): ${context}\nQuestion: ${question}`
         }
       ]
     });
@@ -146,12 +147,12 @@ function startBot() {
       para = para.trim();
       if (!para) continue;
 
-      // Split long paragraphs into 256-char chunks
+      // Split long paragraphs into 256-character chunks
       while (para.length > 0) {
         const chunk = para.substring(0, 256);
         bot.chat(chunk);
         para = para.substring(256);
-        await new Promise(r => setTimeout(r, 500)); // small delay to avoid spam
+        await new Promise(r => setTimeout(r, 500)); // small delay to avoid chat spam
       }
     }
   } catch (err) {
@@ -159,7 +160,6 @@ function startBot() {
     bot.chat("AI Error: Connection failed.");
   }
 }
-
 
     // 5. MOVEMENT / UTILITY
     else if (command === '$goto') {
