@@ -46,10 +46,9 @@ function startBot() {
       (!ignoreMode || ignoreAllowed.has(e.username.toLowerCase()))
     );
     if (target) {
-    bot.lookAt(target.position.offset(0, target.height, 0));
-    bot.pvp.attack(target);
-    bot.chat(`Engaging bounty: ${target.username}!`);
-  }
+      bot.pvp.attack(target);
+      bot.chat(`Engaging bounty: ${target.username}!`);
+    }
   }, 1000);
 
   // AUTO-EQUIP
@@ -88,7 +87,7 @@ function startBot() {
       if (isNaN(count)) return;
       for (let i = 0; i < count; i++) {
         bot.chat(repeatMsg);
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 2500));
       }
     }
 
@@ -111,46 +110,30 @@ function startBot() {
     }
 
     // 4. AI ASK (Fixed for DeepSeek R1 Free)
-      else if (command === '$ask') {
-  const question = args.slice(1).join(' ');
-  if (!question) return bot.chat("Ask me a question!");
-
-  try {
-    const completion = await openrouter.chat.completions.create({
-      model: "openrouter/auto",
-      max_tokens: 300,
-      temperature: 0.7,
-      messages: [
-        {
-          role: "system",
-          content: "You are CodeBot840. Answer clearly and completely. Expert in Minecraft, coding, and math."
-        },
-        {
-          role: "user",
-          content: `Q: ${question}`
+    else if (command === '$ask') {
+      const question = args.slice(1).join(' ');
+      if (!question) return bot.chat("Ask me a question!");
+      try {
+        const completion = await openrouter.chat.completions.create({
+          model: "openrouter/auto",
+          messages: [
+            { role: "system", content: "You are CodeBot840. Be extremely brief (max 256 characters). You are an expert in all minecrft knowledge. Coding and math are following close behind." },
+            { role: "user", content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}` }
+          ]
+        });
+        
+        const answer = completion.choices?.[0]?.message?.content;
+        if (answer) {
+          const cleanAnswer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+          bot.chat(cleanAnswer.substring(0, 256));
+        } else {
+          bot.chat("AI returned an empty response.");
         }
-      ]
-    });
-
-    console.log("Raw OpenRouter response:", completion); // 🔍 log everything
-
-    const answer = completion.choices?.[0]?.message?.content;
-
-    if (!answer || answer.trim().length === 0) {
-      bot.chat("AI returned an empty response. Check console logs.");
-      return;
+      } catch (err) {
+        console.error("AI Error:", err.message);
+        bot.chat("AI Error: Connection failed. Check OpenRouter credits.");
+      }
     }
-
-    // Auto-split if over 256 chars
-    for (let i = 0; i < answer.length; i += 256) {
-      bot.chat(answer.substring(i, i + 256));
-    }
-
-  } catch (err) {
-    console.error("AI Error:", err); // log full error object
-    bot.chat("AI Error. Check API key, credits, or network. See console for details.");
-  }
-}
 
     // 5. MOVEMENT / UTILITY
     else if (command === '$goto') {
