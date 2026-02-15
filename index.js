@@ -134,44 +134,47 @@ function startBot() {
         const answer = completion.choices?.[0]?.message?.content;
         if (answer) {
               // 4. AI ASK (Fixed for DeepSeek R1 Free)
-    else if (command === '$ask') {
-      const question = args.slice(1).join(' ');
-      if (!question) return bot.chat("Ask me a question!");
-      try {
-       const completion = await openrouter.chat.completions.create({
-    model: "openrouter/auto",
-    max_tokens: 10000,
-    temperature: 0.7,
-    messages: [
-    {
-      role: "system",
-      content: "You are CodeBot840. Give clear, complete answers but keep them under 240 characters. You are an expert in all minecraft knowledge. Right behind that omes coding and math."
-    },
-    {
-      role: "user",
-      content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}`
-    }
-  ]
-});
+          // 4. AI ASK
+else if (command === '$ask') {
+  const question = args.slice(1).join(' ');
+  if (!question) return bot.chat("Ask me a question!");
 
-        });
-        
-        const answer = completion.choices?.[0]?.message?.content;
-        if (answer) {
-          const cleanAnswer = answer
-          .replace(/<think>[\s\S]*?<\/think>/g, '')
-          .replace(/^[^a-zA-Z0-9]+/, '') // removes bad leading chars
-          .trim();
-
-          bot.chat(cleanAnswer.substring(0, 256));
-        } else {
-          bot.chat("AI returned an empty response.");
+  try {
+    const completion = await openrouter.chat.completions.create({
+      model: "openrouter/auto",
+      max_tokens: 300,
+      temperature: 0.7,
+      messages: [
+        {
+          role: "system",
+          content: "You are CodeBot840. Give clear complete answers under 240 characters. Expert in Minecraft, coding, and math."
+        },
+        {
+          role: "user",
+          content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}`
         }
-      } catch (err) {
-        console.error("AI Error:", err.message);
-        bot.chat("AI Error: Connection failed. Check OpenRouter credits.");
-      }
+      ]
+    });
+
+    const answer = completion.choices?.[0]?.message?.content;
+
+    if (answer) {
+      const clean = answer
+        .replace(/<think>[\s\S]*?<\/think>/g, '')
+        .replace(/^[^a-zA-Z0-9]+/, '')
+        .trim();
+
+      bot.chat("AI: " + clean.substring(0, 240));
+    } else {
+      bot.chat("AI returned empty response.");
     }
+
+  } catch (err) {
+    console.error("AI Error:", err.message);
+    bot.chat("AI Error. Check API or credits.");
+  }
+}
+
 
     // 5. MOVEMENT / UTILITY
     else if (command === '$goto') {
