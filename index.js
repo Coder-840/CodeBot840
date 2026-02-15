@@ -13,8 +13,11 @@ const botArgs = {
 const PASSWORD = 'YourSecurePassword123';
 let chatLogs = [];
 let bountyList = new Set();
+
+// ===== IGNORE SYSTEM =====
 let ignoreMode = true;
 const ignoreAllowed = new Set(['player_840', 'chickentender']);
+// ========================
 
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -33,57 +36,21 @@ function startBot() {
     console.log('CodeBot840 spawned. Combat/Movement ready.');
   });
 
-  // ===== AUTO-HUNT =====
   // ===== AUTO-HUNT INTERVAL =====
-setInterval(() => {
-  if (bot.pvp.target && bot.pvp.target.isValid) return; // already attacking valid target
+  setInterval(() => {
+    if (bot.pvp.target && bot.pvp.target.isValid) return; // already attacking valid target
 
-  // Look for any bounty target nearby
-  const target = Object.values(bot.entities).find(e =>
-    e.type === 'player' &&
-    e.username &&
-    bountyList.has(e.username.toLowerCase())
-  );
+    const target = Object.values(bot.entities).find(e =>
+      e.type === 'player' &&
+      e.username &&
+      bountyList.has(e.username.toLowerCase())
+    );
 
-  if (target) {
-    bot.pvp.attack(target);
-    bot.chat(`Engaging bounty target: ${target.username}!`);
-  }
-}, 1000);
-
-// ===== $HUNT COMMAND =====
-else if (command === '$hunt') {
-  const targetName = args[1]?.toLowerCase();
-  if (!targetName) {
-    bot.chat("Usage: $hunt [player]");
-    return;
-  }
-
-  if (bountyList.has(targetName)) {
-    bot.chat(`${targetName} is already on the bounty list.`);
-    return;
-  }
-
-  // Add to bounty list
-  bountyList.add(targetName);
-  chatLogs.push(`SERVER: ${targetName} added to bounty list`);
-  bot.chat(`${targetName} added to bounty list.`);
-
-  // Immediately try to attack if the player is nearby
-  const targetEntity = Object.values(bot.entities).find(e =>
-    e.type === 'player' &&
-    e.username?.toLowerCase() === targetName
-  );
-
-  if (targetEntity) {
-    bot.pvp.attack(targetEntity);
-    bot.chat(`Engaging bounty target: ${targetName}!`);
-  } else {
-    bot.chat(`Target ${targetName} not found nearby. Auto-hunt will engage when they appear.`);
-  }
-}
-
-
+    if (target) {
+      bot.pvp.attack(target);
+      bot.chat(`Engaging bounty target: ${target.username}!`);
+    }
+  }, 1000);
 
   // ===== AUTO-EQUIP =====
   setInterval(() => {
@@ -100,7 +67,7 @@ else if (command === '$hunt') {
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return;
 
-    // Always log all chat for AI
+    // Always log all chat
     chatLogs.push(`${username}: ${message}`);
     if (chatLogs.length > 100) chatLogs.shift();
     console.log(`${username}: ${message}`);
@@ -108,13 +75,13 @@ else if (command === '$hunt') {
     const args = message.split(' ');
     const command = args[0].toLowerCase();
 
-    // Ignore mode only affects command handling
+    // Ignore mode affects only commands, not logging
     const canInteract = !ignoreMode || ignoreAllowed.has(username.toLowerCase());
     if (!canInteract && command.startsWith('$')) return;
 
     // ===== COMMANDS =====
     if (command === '$help') {
-      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $hunt [user], $whitelist [user], $bountylist, $kill, $ignore [true/false]');
+      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $hunt [user], $whitelist [user], $bountylist, $locate [user], $kill, $ignore [true/false]');
     }
 
     else if (command === '$repeat') {
@@ -127,39 +94,43 @@ else if (command === '$hunt') {
       }
     }
 
-      else if (command === '$hunt') {
-  const targetName = args[1]?.toLowerCase();
-  if (!targetName) {
-    bot.chat("Usage: $hunt [player]");
-    return;
-  }
+    // ===== $HUNT COMMAND =====
+    else if (command === '$hunt') {
+      const targetName = args[1]?.toLowerCase();
+      if (!targetName) {
+        bot.chat("Usage: $hunt [player]");
+        return;
+      }
 
-  // Add to bounty list
-  bountyList.add(targetName);
-  chatLogs.push(`SERVER: ${targetName} added to bounty list`);
-  bot.chat(`${targetName} added to bounty list.`);
+      if (bountyList.has(targetName)) {
+        bot.chat(`${targetName} is already on the bounty list.`);
+        return;
+      }
 
-  // Immediately try to find the player
-  const targetEntity = Object.values(bot.entities).find(e =>
-    e.type === 'player' &&
-    e.username?.toLowerCase() === targetName
-  );
+      bountyList.add(targetName);
+      chatLogs.push(`SERVER: ${targetName} added to bounty list`);
+      bot.chat(`${targetName} added to bounty list.`);
 
-  if (targetEntity) {
-    bot.pvp.attack(targetEntity);
-    bot.chat(`Engaging bounty target: ${targetName}!`);
-  } else {
-    bot.chat(`Target ${targetName} not found nearby. Auto-hunt will engage when they appear.`);
-  }
-}
+      // Immediately attack if nearby
+      const targetEntity = Object.values(bot.entities).find(e =>
+        e.type === 'player' &&
+        e.username?.toLowerCase() === targetName
+      );
 
+      if (targetEntity) {
+        bot.pvp.attack(targetEntity);
+        bot.chat(`Engaging bounty target: ${targetName}!`);
+      } else {
+        bot.chat(`Target ${targetName} not found nearby. Auto-hunt will engage when they appear.`);
+      }
+    }
 
     else if (command === '$whitelist') {
       const targetName = args[1]?.toLowerCase();
       if (bountyList.delete(targetName)) {
         chatLogs.push(`SERVER: ${targetName} removed from bounty list`);
         bot.chat(`${targetName} pardoned.`);
-        bot.pvp.stop();
+        if (bot.pvp.target?.username?.toLowerCase() === targetName) bot.pvp.stop();
       }
     }
 
@@ -171,14 +142,16 @@ else if (command === '$hunt') {
     else if (command === '$ask') {
       const question = args.slice(1).join(' ');
       if (!question) return bot.chat("Ask me a question!");
+
       try {
         const context = chatLogs.slice(-50).join(' | ');
+
         const completion = await openrouter.chat.completions.create({
           model: "openrouter/auto",
           messages: [
             {
               role: "system",
-              content: `You are CodeBot840, a fully server-aware bot. Be concise and informative. Use the last server messages (chat, deaths, joins, bounties) to answer if possible, max 240 characters per paragraph. Always answer player questions using outside knowledge if logs don't provide enough info. You are an expert in Minecraft, coding, and math.`
+              content: `You are CodeBot840, a fully server-aware bot. Be concise and informative. Use last server messages (chat, deaths, joins, bounties) to answer if possible, max 240 characters per paragraph. Always answer player questions using outside knowledge if logs don't provide enough info. You are an expert in Minecraft, coding, and math.`
             },
             {
               role: "user",
@@ -215,13 +188,16 @@ else if (command === '$hunt') {
       if (isNaN(x)) return;
       bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z));
     }
+
     else if (command === '$coords') {
       const p = bot.entity.position;
       bot.chat(`I am at X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
     }
+
     else if (command === '$kill') {
       bot.chat('/kill');
     }
+
     else if (command === '$ignore') {
       const state = args[1]?.toLowerCase();
       if (state === 'true') {
