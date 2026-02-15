@@ -113,42 +113,48 @@ function startBot() {
       else if (command === '$ask') {
   const question = args.slice(1).join(' ');
   if (!question) return bot.chat("Ask me a question!");
+
   try {
+    // Use the last 30 console messages as context
+    const context = chatLogs.slice(-30).join(' | ');
+
     const completion = await openrouter.chat.completions.create({
       model: "openrouter/auto",
       messages: [
         {
           role: "system",
-          content: "You are CodeBot840. Be extremely brief (max 256 characters per paragraph). You are an expert in all Minecraft knowledge. Coding and math are following close behind."
+          content: "You are CodeBot840, a server-aware bot. Be concise, informative, and relate answers to the server messages if possible (max is 256 characters per paragraph). You are an expert in all minecraft knowledge, coding, and math."
         },
         {
           role: "user",
-          content: `Context: ${chatLogs.slice(-10).join(' | ')}\nQ: ${question}`
+          content: `Server messages: ${context}\nQuestion: ${question}`
         }
       ]
     });
 
-    const answer = completion.choices?.[0]?.message?.content;
-    if (answer) {
-      // Split by line breaks (new paragraphs)
-      const paragraphs = answer
-        .replace(/<think>[\s\S]*?<\/think>/g, '') // remove any <think> tags
-        .trim()
-        .split(/\r?\n/);
+    let answer = completion.choices?.[0]?.message?.content || '';
+    answer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
-      // Send each paragraph as a separate chat message
-      for (const para of paragraphs) {
-        if (para.trim().length > 0) {
-          bot.chat(para.trim().substring(0, 256));
-          await new Promise(r => setTimeout(r, 2000)); // small delay to avoid spam
-        }
-      }
-    } else {
+    if (answer.length === 0) {
       bot.chat("AI returned an empty response.");
+      return;
+    }
+
+    // Split into paragraphs and 256-char chunks
+    const paragraphs = answer.split(/\r?\n/);
+    for (let para of paragraphs) {
+      para = para.trim();
+      if (!para) continue;
+      while (para.length > 0) {
+        const chunk = para.substring(0, 256);
+        bot.chat(chunk);
+        para = para.substring(256);
+        await new Promise(r => setTimeout(r, 500));
+      }
     }
   } catch (err) {
     console.error("AI Error:", err.message);
-    bot.chat("AI Error: Connection failed. Check OpenRouter credits.");
+    bot.chat("AI Error: Connection failed.");
   }
 }
 
