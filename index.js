@@ -110,30 +110,48 @@ function startBot() {
     }
 
     // 4. AI ASK (Fixed for DeepSeek R1 Free)
-    else if (command === '$ask') {
-      const question = args.slice(1).join(' ');
-      if (!question) return bot.chat("Ask me a question!");
-      try {
-        const completion = await openrouter.chat.completions.create({
-          model: "openrouter/auto",
-          messages: [
-            { role: "system", content: "You are CodeBot840. Be extremely brief (max 256 characters). You are an expert in all minecrft knowledge. Coding and math are following close behind." },
-            { role: "user", content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}` }
-          ]
-        });
-        
-        const answer = completion.choices?.[0]?.message?.content;
-        if (answer) {
-          const cleanAnswer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-          bot.chat(cleanAnswer.substring(0, 256));
-        } else {
-          bot.chat("AI returned an empty response.");
+      else if (command === '$ask') {
+  const question = args.slice(1).join(' ');
+  if (!question) return bot.chat("Ask me a question!");
+  try {
+    const completion = await openrouter.chat.completions.create({
+      model: "openrouter/auto",
+      messages: [
+        {
+          role: "system",
+          content: "You are CodeBot840. Be extremely brief (max 256 characters per paragraph). You are an expert in all Minecraft knowledge. Coding and math are following close behind."
+        },
+        {
+          role: "user",
+          content: `Context: ${chatLogs.slice(-10).join(' | ')}\nQ: ${question}`
         }
-      } catch (err) {
-        console.error("AI Error:", err.message);
-        bot.chat("AI Error: Connection failed. Check OpenRouter credits.");
+      ]
+    });
+
+    const answer = completion.choices?.[0]?.message?.content;
+    if (answer) {
+      // Split by line breaks (new paragraphs)
+      const paragraphs = answer
+        .replace(/<think>[\s\S]*?<\/think>/g, '') // remove any <think> tags
+        .trim()
+        .split(/\r?\n/);
+
+      // Send each paragraph as a separate chat message
+      for (const para of paragraphs) {
+        if (para.trim().length > 0) {
+          bot.chat(para.trim().substring(0, 256));
+          await new Promise(r => setTimeout(r, 2000)); // small delay to avoid spam
+        }
       }
+    } else {
+      bot.chat("AI returned an empty response.");
     }
+  } catch (err) {
+    console.error("AI Error:", err.message);
+    bot.chat("AI Error: Connection failed. Check OpenRouter credits.");
+  }
+}
+
 
     // 5. MOVEMENT / UTILITY
     else if (command === '$goto') {
