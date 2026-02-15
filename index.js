@@ -15,6 +15,8 @@ let chatLogs = [];
 let ignoreMode = true;
 const ignoreAllowed = new Set(['player_840', 'chickentender']);
 
+let hunting = false; // ===== ADDED HUNT MODE FLAG =====
+
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: "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"
@@ -30,6 +32,29 @@ function startBot() {
     bot.pvp.movements = new Movements(bot, mcData);
     bot.pvp.movements.canDig = true;
     console.log('CodeBot840 spawned. Combat/Movement ready.');
+
+    // ===== HUNT LOOP (ADDED) =====
+    setInterval(() => {
+      if (!hunting) return;
+      if (!bot.entity) return;
+
+      const targets = Object.values(bot.entities)
+        .filter(e => (e.type === 'mob' || e.type === 'player'))
+        .filter(e => e.position.distanceTo(bot.entity.position) < 6)
+        .filter(e => e.username !== bot.username)
+        .filter(e => e.type !== 'player' || !ignoreAllowed.has(e.username?.toLowerCase()));
+
+      if (!targets.length) return;
+
+      targets.sort((a,b)=>
+        a.position.distanceTo(bot.entity.position) -
+        b.position.distanceTo(bot.entity.position)
+      );
+
+      const target = targets[0];
+      bot.pvp.attack(target);
+
+    }, 1000);
   });
 
   // ===== AUTO-EQUIP =====
@@ -47,7 +72,6 @@ function startBot() {
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return;
 
-    // Always log all chat for AI
     chatLogs.push(`${username}: ${message}`);
     if (chatLogs.length > 100) chatLogs.shift();
     console.log(`${username}: ${message}`);
@@ -55,13 +79,12 @@ function startBot() {
     const args = message.split(' ');
     const command = args[0].toLowerCase();
 
-    // Ignore mode affects only commands
     const canInteract = !ignoreMode || ignoreAllowed.has(username.toLowerCase());
     if (!canInteract && command.startsWith('$')) return;
 
     // ===== COMMANDS =====
     if (command === '$help') {
-      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false]');
+      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $hunt on/off');
     }
 
     else if (command === '$repeat') {
@@ -144,6 +167,21 @@ function startBot() {
         bot.chat('Ignore mode disabled.');
       } else {
         bot.chat('Usage: $ignore true/false');
+      }
+    }
+
+    // ===== HUNT COMMAND (ADDED) =====
+    else if (command === '$hunt') {
+      const arg = args[1]?.toLowerCase();
+      if (arg === 'on') {
+        hunting = true;
+        bot.chat('Hunting mode enabled.');
+      } else if (arg === 'off') {
+        hunting = false;
+        bot.pvp.stop();
+        bot.chat('Hunting mode disabled.');
+      } else {
+        bot.chat('Usage: $hunt on/off');
       }
     }
   });
