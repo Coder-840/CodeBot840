@@ -12,18 +12,16 @@ const botArgs = {
 
 const PASSWORD = 'YourSecurePassword123';
 let chatLogs = [];
+let bountyList = new Set();
 
-// ===== IGNORE SYSTEM =====
-let ignoreMode = false;
+// ===== IGNORE SYSTEM ADDED =====
+let ignoreMode = true;
 const ignoreAllowed = new Set(['player_840', 'chickentender']);
-
-// ===== NEW HUNT SYSTEM =====
-let huntTargets = new Set();
-let currentTarget = null;
+// ================================
 
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
-  apiKey: "REPLACE_WITH_NEW_KEY"
+  apiKey: "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"
 });
 
 function startBot() {
@@ -38,66 +36,23 @@ function startBot() {
     console.log('CodeBot840 spawned. Combat/Movement ready.');
   });
 
-  // =========================
-  // HUNT ENGINE
-  // =========================
-
-  function findTarget() {
-    for (const name in bot.players) {
-      const player = bot.players[name];
-      if (!player.entity) continue;
-
-      const clean = name.toLowerCase();
-
-      if (huntTargets.has(clean) &&
-         (!ignoreMode || ignoreAllowed.has(clean))) {
-        return player.entity;
-      }
-    }
-    return null;
-  }
-
-  function tryAttack() {
-    if (currentTarget && currentTarget.isValid) return;
-
-    const target = findTarget();
-    if (!target) return;
-
-    currentTarget = target;
-    bot.chat(`⚔ Engaging ${target.username}`);
-    bot.pvp.attack(target);
-  }
-
+  // AUTO-HUNT (Fixed: Case-insensitive & smarter entity scan)
   setInterval(() => {
+    if (bot.pvp.target) return;
+    const target = Object.values(bot.entities).find(e =>
+      e.type === 'player' &&
+      e.username &&
+      bountyList.has(e.username.toLowerCase()) &&
+      (!ignoreMode || ignoreAllowed.has(e.username.toLowerCase()))
+    );
+    if (target) {
+    bot.lookAt(target.position.offset(0, target.height, 0));
+    bot.pvp.attack(target);
+    bot.chat(`Engaging bounty: ${target.username}!`);
+  }
+  }, 1000);
 
-    if (currentTarget && !currentTarget.isValid) {
-      currentTarget = null;
-      bot.pvp.stop();
-    }
-
-    if (!currentTarget) {
-      tryAttack();
-    }
-
-  }, 700);
-
-  bot.on('entitySpawn', entity => {
-    if (!entity.username) return;
-
-    const name = entity.username.toLowerCase();
-
-    if (huntTargets.has(name) &&
-       (!ignoreMode || ignoreAllowed.has(name))) {
-
-      currentTarget = entity;
-      bot.chat(`🎯 Target spotted: ${entity.username}`);
-      bot.pvp.attack(entity);
-    }
-  });
-
-  // =========================
-  // AUTO EQUIP
-  // =========================
+  // AUTO-EQUIP
   setInterval(() => {
     const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
     armorTypes.forEach(type => {
@@ -108,13 +63,12 @@ function startBot() {
     if (sword) bot.equip(sword, 'hand').catch(() => {});
   }, 5000);
 
-  // =========================
-  // CHAT COMMANDS
-  // =========================
-
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return;
+
+    // ===== IGNORE FILTER ADDED =====
     if (ignoreMode && !ignoreAllowed.has(username.toLowerCase())) return;
+    // ================================
 
     chatLogs.push(`${username}: ${message}`);
     if (chatLogs.length > 15) chatLogs.shift();
@@ -122,12 +76,12 @@ function startBot() {
     const args = message.split(' ');
     const command = args[0].toLowerCase();
 
-    // HELP
+    // 1. HELP (Single Line)
     if (command === '$help') {
-      bot.chat('Commands: $coords, $repeat, $ask, $goto, $hunt, $whitelist, $bountylist, $kill, $ignore');
+      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $hunt [user], $whitelist [user], $bountylist, $locate [user], $kill, $ignore [true/false]');
     }
 
-    // REPEAT
+    // 2. REPEAT (2500ms delay)
     else if (command === '$repeat') {
       const count = parseInt(args[args.length - 1]);
       const repeatMsg = args.slice(1, -1).join(' ');
@@ -138,105 +92,92 @@ function startBot() {
       }
     }
 
-    // HUNT ADD
+    // 3. BOUNTY SYSTEM
     else if (command === '$hunt') {
-      const name = args[1]?.toLowerCase();
-      if (!name) return bot.chat("Usage: $hunt [player]");
-
-      huntTargets.add(name);
-      bot.chat(`${name} added to hunt list.`);
-      tryAttack();
+      const targetName = args[1]?.toLowerCase();
+      if (!targetName) return bot.chat("Usage: $hunt [player]");
+      bountyList.add(targetName);
+      bot.chat(`${targetName} added to bounty list.`);
     }
-
-    // HUNT REMOVE
     else if (command === '$whitelist') {
-      const name = args[1]?.toLowerCase();
-      if (!name) return;
-
-      huntTargets.delete(name);
-
-      if (currentTarget?.username?.toLowerCase() === name) {
+      const targetName = args[1]?.toLowerCase();
+      if (bountyList.delete(targetName)) {
+        bot.chat(`${targetName} pardoned.`);
         bot.pvp.stop();
-        currentTarget = null;
       }
-
-      bot.chat(`${name} removed.`);
     }
-
-    // LIST
     else if (command === '$bountylist') {
-      bot.chat(`Targets: ${[...huntTargets].join(', ') || 'None'}`);
+      bot.chat(`Targets: ${Array.from(bountyList).join(', ') || 'None'}`);
     }
 
-    // AI ASK
+    // 4. AI ASK (Fixed for DeepSeek R1 Free)
     else if (command === '$ask') {
       const question = args.slice(1).join(' ');
-      if (!question) return bot.chat("Ask me something.");
-
+      if (!question) return bot.chat("Ask me a question!");
       try {
-        const completion = await openrouter.chat.completions.create({
-          model: "openrouter/auto",
-          max_tokens: 500,
-          messages: [
-            { role: "system", content: "You are CodeBot840. Be concise and accurate." },
-            { role: "user", content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}` }
-          ]
-        });
+       const completion = await openrouter.chat.completions.create({
+    model: "openrouter/auto",
+    max_tokens: 10000,
+    temperature: 0.7,
+    messages: [
+    {
+      role: "system",
+      content: "You are CodeBot840. Give clear, complete answers but keep them under 240 characters. You are an expert in all minecraft knowledge. Right behind that omes coding and math."
+    },
+    {
+      role: "user",
+      content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}`
+    }
+  ]
+});
 
+        });
+        
         const answer = completion.choices?.[0]?.message?.content;
         if (answer) {
-          const clean = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-          const safe = clean.slice(0, 1000);
-          bot.chat(safe.endsWith('.') ? safe : safe + '...');
+          const cleanAnswer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+          bot.chat(cleanAnswer.substring(0, 256));
         } else {
-          bot.chat("AI returned nothing.");
+          bot.chat("AI returned an empty response.");
         }
-
       } catch (err) {
         console.error("AI Error:", err.message);
-        bot.chat("AI request failed.");
+        bot.chat("AI Error: Connection failed. Check OpenRouter credits.");
       }
     }
 
-    // GOTO
+    // 5. MOVEMENT / UTILITY
     else if (command === '$goto') {
       const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
       if (isNaN(x)) return;
       bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z));
     }
-
-    // COORDS
     else if (command === '$coords') {
       const p = bot.entity.position;
-      bot.chat(`X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
+      bot.chat(`I am at X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
     }
-
-    // SUICIDE
     else if (command === '$kill') {
       bot.chat('/kill');
     }
 
-    // IGNORE
+    // ===== IGNORE COMMAND ADDED =====
     else if (command === '$ignore') {
       const state = args[1]?.toLowerCase();
-
       if (state === 'true') {
         ignoreMode = true;
-        bot.chat('Ignore enabled.');
+        bot.chat('Ignore mode enabled.');
       }
       else if (state === 'false') {
         ignoreMode = false;
-        bot.chat('Ignore disabled.');
+        bot.chat('Ignore mode disabled.');
       }
       else {
         bot.chat('Usage: $ignore true/false');
       }
     }
+    // =================================
   });
 
-  // =========================
-  // LOGIN AUTO
-  // =========================
   bot.on('messagestr', (m) => {
     if (m.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
     if (m.includes('/login')) bot.chat(`/login ${PASSWORD}`);
