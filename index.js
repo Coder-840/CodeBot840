@@ -13,11 +13,8 @@ const botArgs = {
 const PASSWORD = 'YourSecurePassword123';
 let chatLogs = [];
 let bountyList = new Set();
-
-// ===== IGNORE SYSTEM ADDED =====
 let ignoreMode = true;
 const ignoreAllowed = new Set(['player_840', 'chickentender']);
-// ================================
 
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -36,14 +33,13 @@ function startBot() {
     console.log('CodeBot840 spawned. Combat/Movement ready.');
   });
 
-  // AUTO-HUNT (Fixed: Case-insensitive & smarter entity scan)
+  // ===== AUTO-HUNT =====
   setInterval(() => {
     if (bot.pvp.target) return;
     const target = Object.values(bot.entities).find(e =>
       e.type === 'player' &&
       e.username &&
-      bountyList.has(e.username.toLowerCase()) &&
-      (!ignoreMode || ignoreAllowed.has(e.username.toLowerCase()))
+      bountyList.has(e.username.toLowerCase())
     );
     if (target) {
       bot.pvp.attack(target);
@@ -51,7 +47,7 @@ function startBot() {
     }
   }, 1000);
 
-  // AUTO-EQUIP
+  // ===== AUTO-EQUIP =====
   setInterval(() => {
     const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
     armorTypes.forEach(type => {
@@ -62,25 +58,27 @@ function startBot() {
     if (sword) bot.equip(sword, 'hand').catch(() => {});
   }, 5000);
 
+  // ===== CHAT HANDLER =====
   bot.on('chat', async (username, message) => {
     if (username === bot.username) return;
 
-    // ===== IGNORE FILTER ADDED =====
-    if (ignoreMode && !ignoreAllowed.has(username.toLowerCase())) return;
-    // ================================
-
+    // Always log all chat for AI
     chatLogs.push(`${username}: ${message}`);
-    if (chatLogs.length > 15) chatLogs.shift();
+    if (chatLogs.length > 100) chatLogs.shift();
+    console.log(`${username}: ${message}`);
 
     const args = message.split(' ');
     const command = args[0].toLowerCase();
 
-    // 1. HELP (Single Line)
+    // Ignore mode only affects command handling
+    const canInteract = !ignoreMode || ignoreAllowed.has(username.toLowerCase());
+    if (!canInteract && command.startsWith('$')) return;
+
+    // ===== COMMANDS =====
     if (command === '$help') {
-      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $hunt [user], $whitelist [user], $bountylist, $locate [user], $kill, $ignore [true/false]');
+      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $hunt [user], $whitelist [user], $bountylist, $kill, $ignore [true/false]');
     }
 
-    // 2. REPEAT (2000ms delay)
     else if (command === '$repeat') {
       const count = parseInt(args[args.length - 1]);
       const repeatMsg = args.slice(1, -1).join(' ');
@@ -91,77 +89,70 @@ function startBot() {
       }
     }
 
-    // 3. BOUNTY SYSTEM
     else if (command === '$hunt') {
       const targetName = args[1]?.toLowerCase();
       if (!targetName) return bot.chat("Usage: $hunt [player]");
       bountyList.add(targetName);
+      chatLogs.push(`SERVER: ${targetName} added to bounty list`);
       bot.chat(`${targetName} added to bounty list.`);
     }
+
     else if (command === '$whitelist') {
       const targetName = args[1]?.toLowerCase();
       if (bountyList.delete(targetName)) {
+        chatLogs.push(`SERVER: ${targetName} removed from bounty list`);
         bot.chat(`${targetName} pardoned.`);
         bot.pvp.stop();
       }
     }
+
     else if (command === '$bountylist') {
       bot.chat(`Targets: ${Array.from(bountyList).join(', ') || 'None'}`);
     }
+
     // ===== SERVER-AWARE $ASK =====
-else if (command === '$ask') {
-  const question = args.slice(1).join(' ');
-  if (!question) return bot.chat("Ask me a question!");
+    else if (command === '$ask') {
+      const question = args.slice(1).join(' ');
+      if (!question) return bot.chat("Ask me a question!");
+      try {
+        const context = chatLogs.slice(-50).join(' | ');
+        const completion = await openrouter.chat.completions.create({
+          model: "openrouter/auto",
+          messages: [
+            {
+              role: "system",
+              content: `You are CodeBot840, a fully server-aware bot. Be concise and informative. Use the last server messages (chat, deaths, joins, bounties) to answer if possible, max 240 characters per paragraph. Always answer player questions using outside knowledge if logs don't provide enough info. You are an expert in Minecraft, coding, and math.`
+            },
+            {
+              role: "user",
+              content: `Server messages (players + server events + bounties): ${context}\nQuestion: ${question}`
+            }
+          ]
+        });
 
-  try {
-    // Use the last 50 messages from chatLogs as context
-    const context = chatLogs.slice(-50).join(' | ');
+        let answer = completion.choices?.[0]?.message?.content || '';
+        answer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+        if (!answer) return bot.chat("AI returned an empty response.");
 
-    const completion = await openrouter.chat.completions.create({
-      model: "openrouter/auto",
-      messages: [
-        {
-          role: "system",
-          content: `You are CodeBot840, a fully server-aware bot. Be concise and informative. Use the last server messages (chat, deaths, joins, bounties) to answer if possible, max 240 characters per paragraph. Always answer player questions using outside knowledge if logs don't provide enough info. You are an expert in Minecraft, coding, and math.`
-        },
-        {
-          role: "user",
-          content: `Server messages (players + server events + bounties): ${context}\nQuestion: ${question}`
+        const paragraphs = answer.split(/\r?\n/);
+        for (let para of paragraphs) {
+          para = para.trim();
+          if (!para) continue;
+          while (para.length > 0) {
+            const chunk = para.substring(0, 256);
+            bot.chat(chunk);
+            para = para.substring(256);
+            await new Promise(r => setTimeout(r, 500));
+          }
         }
-      ]
-    });
 
-    let answer = completion.choices?.[0]?.message?.content || '';
-    answer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-
-    if (!answer) {
-      bot.chat("AI returned an empty response.");
-      return;
-    }
-
-    // Split answer into paragraphs
-    const paragraphs = answer.split(/\r?\n/);
-    for (let para of paragraphs) {
-      para = para.trim();
-      if (!para) continue;
-
-      // Split long paragraphs into 256-character chunks
-      while (para.length > 0) {
-        const chunk = para.substring(0, 256);
-        bot.chat(chunk);
-        para = para.substring(256);
-        await new Promise(r => setTimeout(r, 500)); // delay to avoid spam
+      } catch (err) {
+        console.error("AI Error:", err.message);
+        bot.chat("AI Error: Connection failed.");
       }
     }
 
-  } catch (err) {
-    console.error("AI Error:", err.message);
-    bot.chat("AI Error: Connection failed.");
-  }
-}
-
-
-    // 5. MOVEMENT / UTILITY
+    // ===== MOVEMENT / UTILITY =====
     else if (command === '$goto') {
       const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
       if (isNaN(x)) return;
@@ -174,28 +165,37 @@ else if (command === '$ask') {
     else if (command === '$kill') {
       bot.chat('/kill');
     }
-
-    // ===== IGNORE COMMAND ADDED =====
     else if (command === '$ignore') {
       const state = args[1]?.toLowerCase();
       if (state === 'true') {
         ignoreMode = true;
         bot.chat('Ignore mode enabled.');
-      }
-      else if (state === 'false') {
+      } else if (state === 'false') {
         ignoreMode = false;
         bot.chat('Ignore mode disabled.');
-      }
-      else {
+      } else {
         bot.chat('Usage: $ignore true/false');
       }
     }
-    // =================================
   });
 
-  bot.on('messagestr', (m) => {
-    if (m.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
-    if (m.includes('/login')) bot.chat(`/login ${PASSWORD}`);
+  // ===== SERVER EVENTS =====
+  bot.on('messagestr', (message) => {
+    console.log(`SERVER: ${message}`);
+    chatLogs.push(`SERVER: ${message}`);
+    if (chatLogs.length > 100) chatLogs.shift();
+
+    if (message.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
+    if (message.includes('/login')) bot.chat(`/login ${PASSWORD}`);
+  });
+
+  bot.on('entityDeath', (entity) => {
+    if (entity.type === 'player') {
+      const deathMsg = `SERVER: ${entity.username} died`;
+      console.log(deathMsg);
+      chatLogs.push(deathMsg);
+      if (chatLogs.length > 100) chatLogs.shift();
+    }
   });
 
   bot.on('kicked', () => setTimeout(startBot, 10000));
