@@ -108,50 +108,13 @@ function startBot() {
     else if (command === '$bountylist') {
       bot.chat(`Targets: ${Array.from(bountyList).join(', ') || 'None'}`);
     }
-
-// =====================
-// FULL SERVER-AWARE LOGGING
-// =====================
-
-// Track all chat messages (player -> AI context)
-bot.on('chat', (username, message) => {
-  const formatted = `${username}: ${message}`;
-  console.log(formatted);
-  chatLogs.push(formatted);
-  if (chatLogs.length > 100) chatLogs.shift();
-
-  // Ignore mode still works for commands/auto-hunt
-  if (ignoreMode && !ignoreAllowed.has(username.toLowerCase())) return;
-
-  // ... your existing command handling logic here
-});
-
-// Track all raw server messages
-bot.on('messagestr', (message) => {
-  console.log(`SERVER: ${message}`);
-  chatLogs.push(`SERVER: ${message}`);
-  if (chatLogs.length > 100) chatLogs.shift();
-});
-
-// Track all player deaths
-bot.on('entityDeath', (entity) => {
-  if (entity.type === 'player') {
-    const deathMsg = `SERVER: ${entity.username} died`;
-    console.log(deathMsg);
-    chatLogs.push(deathMsg);
-    if (chatLogs.length > 100) chatLogs.shift();
-  }
-});
-
-// =====================
-// SERVER-AWARE $ASK
-// =====================
+    // ===== SERVER-AWARE $ASK =====
 else if (command === '$ask') {
   const question = args.slice(1).join(' ');
   if (!question) return bot.chat("Ask me a question!");
 
   try {
-    // Take the last 50 messages as context
+    // Use the last 50 messages from chatLogs as context
     const context = chatLogs.slice(-50).join(' | ');
 
     const completion = await openrouter.chat.completions.create({
@@ -159,7 +122,7 @@ else if (command === '$ask') {
       messages: [
         {
           role: "system",
-          content: "You are CodeBot840, a server-aware bot. Be concise, informative, and relate answers to server messages if possible (max 240 characters per paragraph). Always try to answer any player question, using outside knowledge if server logs don't provide info. You are an expert in Minecraft, coding, and math. You can infer details about players from chat and events."
+          content: `You are CodeBot840, a fully server-aware bot. Be concise and informative. Use the last server messages (chat, deaths, joins, bounties) to answer if possible, max 240 characters per paragraph. Always answer player questions using outside knowledge if logs don't provide enough info. You are an expert in Minecraft, coding, and math.`
         },
         {
           role: "user",
@@ -176,7 +139,7 @@ else if (command === '$ask') {
       return;
     }
 
-    // Split into paragraphs
+    // Split answer into paragraphs
     const paragraphs = answer.split(/\r?\n/);
     for (let para of paragraphs) {
       para = para.trim();
@@ -187,9 +150,10 @@ else if (command === '$ask') {
         const chunk = para.substring(0, 256);
         bot.chat(chunk);
         para = para.substring(256);
-        await new Promise(r => setTimeout(r, 500)); // small delay to avoid spam
+        await new Promise(r => setTimeout(r, 500)); // delay to avoid spam
       }
     }
+
   } catch (err) {
     console.error("AI Error:", err.message);
     bot.chat("AI Error: Connection failed.");
