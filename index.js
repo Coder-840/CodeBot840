@@ -34,18 +34,19 @@ function startBot() {
   });
 
   // ===== AUTO-HUNT =====
-  setInterval(() => {
-    if (bot.pvp.target) return;
-    const target = Object.values(bot.entities).find(e =>
-      e.type === 'player' &&
-      e.username &&
-      bountyList.has(e.username.toLowerCase())
-    );
-    if (target) {
-      bot.pvp.attack(target);
-      bot.chat(`Engaging bounty: ${target.username}!`);
-    }
-  }, 1000);
+setInterval(() => {
+  if (bot.pvp.target) return;
+  const target = Object.values(bot.entities).find(e =>
+    e.type === 'player' &&
+    e.username &&
+    bountyList.has(e.username.toLowerCase())
+  );
+  if (target) {
+    bot.pvp.attack(target);
+    bot.chat(`Engaging bounty: ${target.username}!`);
+  }
+}, 1000);
+
 
   // ===== AUTO-EQUIP =====
   setInterval(() => {
@@ -89,13 +90,32 @@ function startBot() {
       }
     }
 
-    else if (command === '$hunt') {
-      const targetName = args[1]?.toLowerCase();
-      if (!targetName) return bot.chat("Usage: $hunt [player]");
-      bountyList.add(targetName);
-      chatLogs.push(`SERVER: ${targetName} added to bounty list`);
-      bot.chat(`${targetName} added to bounty list.`);
-    }
+      else if (command === '$hunt') {
+  const targetName = args[1]?.toLowerCase();
+  if (!targetName) {
+    bot.chat("Usage: $hunt [player]");
+    return;
+  }
+
+  // Add to bounty list
+  bountyList.add(targetName);
+  chatLogs.push(`SERVER: ${targetName} added to bounty list`);
+  bot.chat(`${targetName} added to bounty list.`);
+
+  // Immediately try to find the player
+  const targetEntity = Object.values(bot.entities).find(e =>
+    e.type === 'player' &&
+    e.username?.toLowerCase() === targetName
+  );
+
+  if (targetEntity) {
+    bot.pvp.attack(targetEntity);
+    bot.chat(`Engaging bounty target: ${targetName}!`);
+  } else {
+    bot.chat(`Target ${targetName} not found nearby. Auto-hunt will engage when they appear.`);
+  }
+}
+
 
     else if (command === '$whitelist') {
       const targetName = args[1]?.toLowerCase();
