@@ -88,7 +88,7 @@ function startBot() {
       if (isNaN(count)) return;
       for (let i = 0; i < count; i++) {
         bot.chat(repeatMsg);
-        await new Promise(r => setTimeout(r, 1750));
+        await new Promise(r => setTimeout(r, 2000));
       }
     }
 
