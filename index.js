@@ -88,7 +88,7 @@ function startBot() {
       if (isNaN(count)) return;
       for (let i = 0; i < count; i++) {
         bot.chat(repeatMsg);
-        await new Promise(r => setTimeout(r, 2500));
+        await new Promise(r => setTimeout(r, 1750));
       }
     }
 
@@ -118,36 +118,37 @@ function startBot() {
   try {
     const completion = await openrouter.chat.completions.create({
       model: "openrouter/auto",
-      max_tokens: 500, // allows a fuller answer
+      max_tokens: 300,       // reasonable for chat
       temperature: 0.7,
       messages: [
         {
           role: "system",
-          content: "You are CodeBot840. Give clear answers. You are an expert in Minecraft, coding, and math."
+          content: "You are CodeBot840. Answer clearly and completely. Expert in Minecraft, coding, and math."
         },
         {
           role: "user",
-          content: `Context: ${chatLogs.join(' | ')}\nQ: ${question}`
+          content: `Q: ${question}`
         }
       ]
     });
 
     const answer = completion.choices?.[0]?.message?.content;
-    if (answer) {
-      const clean = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-
-      // Split into chunks if over 256 characters
-      for (let i = 0; i < clean.length; i += 256) {
-        bot.chat(clean.substring(i, i + 256));
-      }
-    } else {
-      bot.chat("AI returned an empty response.");
+    if (!answer || answer.trim().length === 0) {
+      bot.chat("AI returned an empty response. Try rephrasing.");
+      return;
     }
+
+    // Auto-split if over 256 chars
+    for (let i = 0; i < answer.length; i += 256) {
+      bot.chat(answer.substring(i, i + 256));
+    }
+
   } catch (err) {
-    console.error("AI Error:", err.message);
-    bot.chat("AI Error. Check API or credits.");
+    console.error("AI Error:", err);
+    bot.chat("AI Error. Check API key, credits, or network.");
   }
 }
+
 
 
     // 5. MOVEMENT / UTILITY
