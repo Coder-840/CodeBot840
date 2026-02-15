@@ -109,14 +109,49 @@ function startBot() {
       bot.chat(`Targets: ${Array.from(bountyList).join(', ') || 'None'}`);
     }
 
-    // 4. AI ASK (Fixed for DeepSeek R1 Free)
-      // 4. AI ASK (Server-aware)
+// =====================
+// FULL SERVER-AWARE LOGGING
+// =====================
+
+// Track all chat messages (player -> AI context)
+bot.on('chat', (username, message) => {
+  const formatted = `${username}: ${message}`;
+  console.log(formatted);
+  chatLogs.push(formatted);
+  if (chatLogs.length > 100) chatLogs.shift();
+
+  // Ignore mode still works for commands/auto-hunt
+  if (ignoreMode && !ignoreAllowed.has(username.toLowerCase())) return;
+
+  // ... your existing command handling logic here
+});
+
+// Track all raw server messages
+bot.on('messagestr', (message) => {
+  console.log(`SERVER: ${message}`);
+  chatLogs.push(`SERVER: ${message}`);
+  if (chatLogs.length > 100) chatLogs.shift();
+});
+
+// Track all player deaths
+bot.on('entityDeath', (entity) => {
+  if (entity.type === 'player') {
+    const deathMsg = `SERVER: ${entity.username} died`;
+    console.log(deathMsg);
+    chatLogs.push(deathMsg);
+    if (chatLogs.length > 100) chatLogs.shift();
+  }
+});
+
+// =====================
+// SERVER-AWARE $ASK
+// =====================
 else if (command === '$ask') {
   const question = args.slice(1).join(' ');
   if (!question) return bot.chat("Ask me a question!");
 
   try {
-    // Use the last 50 messages from chatLogs (player + server messages) as context
+    // Take the last 50 messages as context
     const context = chatLogs.slice(-50).join(' | ');
 
     const completion = await openrouter.chat.completions.create({
@@ -124,11 +159,11 @@ else if (command === '$ask') {
       messages: [
         {
           role: "system",
-          content: "You are CodeBot840, a server-aware bot. Be concise, informative, and relate answers to the server messages if possible (max 240 characters per paragraph — DO NOT exceed). Your goal is to answer any player question, not judge what is worth answering. Use outside knowledge if server logs don't provide enough info. You are an expert in Minecraft, coding, and math. You can infer details about players from chat if needed. You do not always have to mention the chat if the the logs did not mention anything related to the question."
+          content: "You are CodeBot840, a server-aware bot. Be concise, informative, and relate answers to server messages if possible (max 240 characters per paragraph). Always try to answer any player question, using outside knowledge if server logs don't provide info. You are an expert in Minecraft, coding, and math. You can infer details about players from chat and events."
         },
         {
           role: "user",
-          content: `Server messages (players + server events): ${context}\nQuestion: ${question}`
+          content: `Server messages (players + server events + bounties): ${context}\nQuestion: ${question}`
         }
       ]
     });
@@ -152,7 +187,7 @@ else if (command === '$ask') {
         const chunk = para.substring(0, 256);
         bot.chat(chunk);
         para = para.substring(256);
-        await new Promise(r => setTimeout(r, 500)); // small delay to avoid chat spam
+        await new Promise(r => setTimeout(r, 500)); // small delay to avoid spam
       }
     }
   } catch (err) {
@@ -160,6 +195,7 @@ else if (command === '$ask') {
     bot.chat("AI Error: Connection failed.");
   }
 }
+
 
     // 5. MOVEMENT / UTILITY
     else if (command === '$goto') {
