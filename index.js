@@ -22,7 +22,7 @@ let musketsActive = false;
 let musketBots = [];
 
 function randomGibberish() {
-  const syllables = ["ka","zu","mi","ta","ra","xo","li","ve","no","chi","sa","re","vo","da","ni","po"];
+  const syllables = ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"];
   let msg = "";
   const len = Math.floor(Math.random()*6)+3;
   for (let i=0;i<len;i++) {
@@ -62,17 +62,23 @@ function createMusket(mainBot, username) {
     });
 
     // ===== AUTO REJOIN =====
-    b.on("end", () => {
-      if (musketsActive) setTimeout(spawnBot, 3000);
-    });
-
-    b.on("kicked", () => {
-      if (musketsActive) setTimeout(spawnBot, 5000);
-    });
-
-    b.on("error", ()=>{});
+// reconnect ONLY if actually kicked
+b.on("kicked", (reason) => {
+  console.log(username + " kicked:", reason);
+  if (musketsActive) {
+    setTimeout(spawnBot, 8000);
   }
+});
 
+// DO NOT reconnect on normal disconnect
+b.on("end", () => {
+  console.log(username + " disconnected normally.");
+});
+
+// prevent crash on minor errors
+b.on("error", (err) => {
+  console.log(username + " error:", err.message);
+});
   spawnBot();
 }
 
