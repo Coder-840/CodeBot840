@@ -36,14 +36,21 @@ function createMusket(mainBot, username) {
     if (!musketsActive) return;
 
     const b = mineflayer.createBot({
-      host: mainBot._client.socket._host,
-      port: mainBot._client.socket._port,
+      host: botArgs.host,
+      port: botArgs.port,
       username: username,
-      version: mainBot.version
+      version: botArgs.version
     });
 
     musketBots.push(b);
 
+    // ===== AUTO REGISTER / LOGIN =====
+    b.on('messagestr', (message) => {
+      if (message.includes('/register')) b.chat(`/register ${PASSWORD} ${PASSWORD}`);
+      if (message.includes('/login')) b.chat(`/login ${PASSWORD}`);
+    });
+
+    // ===== RANDOM LANGUAGE CHAT =====
     b.once("spawn", () => {
       const interval = setInterval(() => {
         if (!musketsActive) {
@@ -54,6 +61,7 @@ function createMusket(mainBot, username) {
       }, Math.random()*4000 + 2000);
     });
 
+    // ===== AUTO REJOIN =====
     b.on("end", () => {
       if (musketsActive) setTimeout(spawnBot, 3000);
     });
@@ -67,6 +75,7 @@ function createMusket(mainBot, username) {
 
   spawnBot();
 }
+
 
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
