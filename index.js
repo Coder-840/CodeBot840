@@ -21,12 +21,21 @@ let hunting = false; // ===== ADDED HUNT MODE FLAG =====
 let musketsActive = false;
 let musketBots = [];
 
+const gibberishChars = [
+  "a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z",
+  "A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z",
+  "0","1","2","3","4","5","6","7","8","9","!","\"","#","$","%","&","'","(",")","*","+",
+  ",","-",".","/",":",";","<","=",">","?","@","[","\\","]","^","_","`","{","|","}","~",
+  "§","À","Á","Â","Ã","Ä","Å","Æ","Ç","È","É","Ê","Ë","Ì","Í","Î","Ï","Ð","Ñ","Ò","Ó",
+  "Ô","Õ","Ö","×","Ø","Ù","Ú","Û","Ü","Ý","Þ","ß","à","á","â","ã","ä","å","æ","ç","è",
+  "é","ê","ë","ì","í","î","ï","ð","ñ","ò","ó","ô","õ","ö","÷","ø","ù","ú","û","ü","ý","þ","ÿ"
+];
+
 function randomGibberish() {
-  const syllables = "abcdefghijklmnopqrstuvwxyz".split("");
   let msg = "";
-  const len = Math.floor(Math.random() * 6) + 3;
+  const len = Math.floor(Math.random() * 6) + 3; // 3-8 characters
   for (let i = 0; i < len; i++) {
-    msg += syllables[Math.floor(Math.random() * syllables.length)];
+    msg += gibberishChars[Math.floor(Math.random() * gibberishChars.length)];
   }
   return msg;
 }
@@ -68,9 +77,7 @@ function createMusket(username) {
     });
 
     // Normal disconnect does NOT reconnect
-    b.on('end', () => {
-      console.log(username + " disconnected normally.");
-    });
+    b.on('end', () => console.log(username + " disconnected normally."));
 
     // Prevent crashes from minor errors
     b.on('error', err => console.log(username + " error:", err.message));
@@ -89,9 +96,7 @@ async function handle3MusketsCommand(bot) {
     bot.chat("The three musketeers have arrived.");
   } else {
     musketsActive = false;
-    musketBots.forEach(b => {
-      try { b.quit(); } catch {}
-    });
+    musketBots.forEach(b => { try { b.quit(); } catch {} });
     musketBots = [];
     bot.chat("The musketeers vanished.");
   }
