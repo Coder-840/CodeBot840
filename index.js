@@ -145,13 +145,19 @@ function startBot() {
     }
 
     // ===== MOVEMENT / UTILITY =====
-    else if (command === '$goto') {
-      const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
-      if (isNaN(x)) return;
+      else if (command === '$goto') {
+  const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
+  if (isNaN(x)) return;
 
-      bot.pathfinder.setGoal(null);
-      bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z), true);
-    }
+  // enable block placing for pathfinder
+  const movements = new Movements(bot);
+  movements.allow1by1towers = true;      // allows towering up
+  movements.scafoldingBlocks = bot.inventory.items().map(i => i.type); // use any block in inventory
+  bot.pathfinder.setMovements(movements);
+
+  bot.pathfinder.setGoal(null);
+  bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z), true);
+}
 
     else if (command === '$coords') {
       const p = bot.entity.position;
