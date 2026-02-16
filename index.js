@@ -17,20 +17,6 @@ const ignoreAllowed = new Set(['player_840', 'chickentender']);
 
 let hunting = false; // ===== ADDED HUNT MODE FLAG =====
 
-// ===== 3 MUSKETEERS SYSTEM =====
-let musketsActive = false;
-let musketBots = [];
-
-function randomGibberish() {
-  const syllables = ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"];
-  let msg = "";
-  const len = Math.floor(Math.random()*6)+3;
-  for (let i=0;i<len;i++) {
-    msg += syllables[Math.floor(Math.random()*syllables.length)];
-  }
-  return msg;
-}
-
 function createMusket(mainBot, username) {
   function spawnBot() {
     if (!musketsActive) return;
@@ -62,25 +48,22 @@ function createMusket(mainBot, username) {
     });
 
     // ===== AUTO REJOIN =====
-// reconnect ONLY if actually kicked
-b.on("kicked", (reason) => {
-  console.log(username + " kicked:", reason);
-  if (musketsActive) {
-    setTimeout(spawnBot, 8000);
-  }
-});
+    b.on("kicked", (reason) => {
+      console.log(username + " kicked:", reason);
+      if (musketsActive) setTimeout(spawnBot, 8000);
+    });
 
-// DO NOT reconnect on normal disconnect
-b.on("end", () => {
-  console.log(username + " disconnected normally.");
-});
+    b.on("end", () => {
+      console.log(username + " disconnected normally.");
+    });
 
-// prevent crash on minor errors
-b.on("error", (err) => {
-  console.log(username + " error:", err.message);
-});
-  spawnBot();
-}
+    b.on("error", (err) => {
+      console.log(username + " error:", err.message);
+    });
+  } // <--- close spawnBot
+
+  spawnBot(); // call it once when createMusket is invoked
+} // <--- close createMusket
 
 
 const openrouter = new OpenAI({
