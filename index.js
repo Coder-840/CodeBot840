@@ -164,7 +164,7 @@ function startBot() {
 
     // ===== COMMANDS =====
     if (command === '$help') {
-      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $hunt on/off');
+      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets');
     }
 
     else if (command === '$repeat') {
