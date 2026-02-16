@@ -124,14 +124,17 @@ function startBot() {
         if (!answer) return bot.chat("AI returned an empty response.");
 
         const paragraphs = answer.split(/\r?\n/);
+        const MAX_LENGTH = 256;
+
         for (let para of paragraphs) {
           para = para.trim();
           if (!para) continue;
+
           while (para.length > 0) {
-            const chunk = para.substring(0, 150);
+            const chunk = para.substring(0, MAX_LENGTH);
             bot.chat(chunk);
-            para = para.substring(256);
-            await new Promise(r => setTimeout(r, 500));
+            para = para.substring(MAX_LENGTH);
+            await new Promise(r => setTimeout(r, 900));
           }
         }
 
@@ -145,7 +148,9 @@ function startBot() {
     else if (command === '$goto') {
       const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
       if (isNaN(x)) return;
-      bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z));
+
+      bot.pathfinder.setGoal(null);
+      bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z), true);
     }
 
     else if (command === '$coords') {
@@ -158,6 +163,8 @@ function startBot() {
     }
 
     else if (command === '$ignore') {
+      if (!ignoreAllowed.has(username.toLowerCase())) return;
+
       const state = args[1]?.toLowerCase();
       if (state === 'true') {
         ignoreMode = true;
