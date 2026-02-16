@@ -16,6 +16,7 @@ let ignoreMode = true;
 const ignoreAllowed = new Set(['player_840', 'chickentender']);
 
 let hunting = false; // ===== ADDED HUNT MODE FLAG =====
+
 function createMusket(mainBot, username) {
   function spawnBot() {
     if (!musketsActive) return;
