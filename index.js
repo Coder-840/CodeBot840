@@ -17,11 +17,25 @@ const ignoreAllowed = new Set(['player_840', 'chickentender']);
 
 let hunting = false; // ===== ADDED HUNT MODE FLAG =====
 
-function createMusket(mainBot, username) {
+// ===== 3 MUSKETEERS SYSTEM =====
+let musketsActive = false;
+let musketBots = [];
+
+function randomGibberish() {
+  const syllables = "abcdefghijklmnopqrstuvwxyz".split("");
+  let msg = "";
+  const len = Math.floor(Math.random() * 6) + 3;
+  for (let i = 0; i < len; i++) {
+    msg += syllables[Math.floor(Math.random() * syllables.length)];
+  }
+  return msg;
+}
+
+function createMusket(username) {
   function spawnBot() {
     if (!musketsActive) return;
 
-    const b = mineflayer.createBot({
+    const b = require('mineflayer').createBot({
       host: botArgs.host,
       port: botArgs.port,
       username: username,
@@ -30,14 +44,8 @@ function createMusket(mainBot, username) {
 
     musketBots.push(b);
 
-    // ===== AUTO REGISTER / LOGIN =====
-    b.on('messagestr', (message) => {
-      if (message.includes('/register')) b.chat(`/register ${PASSWORD} ${PASSWORD}`);
-      if (message.includes('/login')) b.chat(`/login ${PASSWORD}`);
-    });
-
-    // ===== RANDOM LANGUAGE CHAT =====
-    b.once("spawn", () => {
+    // ===== RANDOM CHAT =====
+    b.once('spawn', () => {
       const interval = setInterval(() => {
         if (!musketsActive) {
           clearInterval(interval);
@@ -47,21 +55,47 @@ function createMusket(mainBot, username) {
       }, Math.random() * 4000 + 2000);
     });
 
-    // ===== AUTO REJOIN =====
-    b.on("kicked", (reason) => {
+    // ===== AUTO REGISTER / LOGIN =====
+    b.on('messagestr', message => {
+      if (message.includes('/register')) b.chat(`/register ${PASSWORD} ${PASSWORD}`);
+      if (message.includes('/login')) b.chat(`/login ${PASSWORD}`);
+    });
+
+    // ===== AUTO RECONNECT ONLY IF KICKED =====
+    b.on('kicked', reason => {
       console.log(username + " kicked:", reason);
       if (musketsActive) setTimeout(spawnBot, 8000);
     });
 
-    // DO NOT reconnect on normal disconnect
-    b.on("end", () => console.log(username + " disconnected normally."));
+    // Normal disconnect does NOT reconnect
+    b.on('end', () => {
+      console.log(username + " disconnected normally.");
+    });
 
-    // prevent crash on minor errors
-    b.on("error", (err) => console.log(username + " error:", err.message));
-  } // <--- closes spawnBot
+    // Prevent crashes from minor errors
+    b.on('error', err => console.log(username + " error:", err.message));
+  }
 
-  spawnBot(); // call spawnBot once when createMusket is invoked
-} // <--- closes createMusket
+  spawnBot();
+}
+
+// ===== COMMAND TO TOGGLE MUSKETEERS =====
+async function handle3MusketsCommand(bot) {
+  if (!musketsActive) {
+    musketsActive = true;
+    createMusket("Musketeer1");
+    createMusket("Musketeer2");
+    createMusket("Musketeer3");
+    bot.chat("The three musketeers have arrived.");
+  } else {
+    musketsActive = false;
+    musketBots.forEach(b => {
+      try { b.quit(); } catch {}
+    });
+    musketBots = [];
+    bot.chat("The musketeers vanished.");
+  }
+}
 
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -205,29 +239,9 @@ function startBot() {
   bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z), true);
 }
 
-        else if (command === '$3muskets') {
-  if (!musketsActive) {
-    musketsActive = true;
-
-    // spawn musketeers without affecting main bot
-    createMusket(bot, "Musketeer1");
-    createMusket(bot, "Musketeer2");
-    createMusket(bot, "Musketeer3");
-
-    bot.chat("The three musketeers have arrived.");
-  } else {
-    musketsActive = false;
-
-    // properly quit all musketeers
-    musketBots.forEach(b => {
-      try { b.quit(); } catch {}
-    });
-    musketBots = [];
-
-    bot.chat("The musketeers vanished.");
-  }
+else if (command === '$3muskets') {
+  handle3MusketsCommand(bot);
 }
-
 
     else if (command === '$coords') {
       const p = bot.entity.position;
