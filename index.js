@@ -206,10 +206,10 @@ function startBot() {
 }
 
         else if (command === '$3muskets') {
-
   if (!musketsActive) {
     musketsActive = true;
 
+    // spawn musketeers without affecting main bot
     createMusket(bot, "Musketeer1");
     createMusket(bot, "Musketeer2");
     createMusket(bot, "Musketeer3");
@@ -218,15 +218,16 @@ function startBot() {
   } else {
     musketsActive = false;
 
+    // properly quit all musketeers
     musketBots.forEach(b => {
       try { b.quit(); } catch {}
     });
-
     musketBots = [];
 
     bot.chat("The musketeers vanished.");
   }
 }
+
 
     else if (command === '$coords') {
       const p = bot.entity.position;
