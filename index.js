@@ -17,6 +17,57 @@ const ignoreAllowed = new Set(['player_840', 'chickentender']);
 
 let hunting = false; // ===== ADDED HUNT MODE FLAG =====
 
+// ===== 3 MUSKETEERS SYSTEM =====
+let musketsActive = false;
+let musketBots = [];
+
+function randomGibberish() {
+  const syllables = ["ka","zu","mi","ta","ra","xo","li","ve","no","chi","sa","re","vo","da","ni","po"];
+  let msg = "";
+  const len = Math.floor(Math.random()*6)+3;
+  for (let i=0;i<len;i++) {
+    msg += syllables[Math.floor(Math.random()*syllables.length)];
+  }
+  return msg;
+}
+
+function createMusket(mainBot, username) {
+  function spawnBot() {
+    if (!musketsActive) return;
+
+    const b = mineflayer.createBot({
+      host: mainBot._client.socket._host,
+      port: mainBot._client.socket._port,
+      username: username,
+      version: mainBot.version
+    });
+
+    musketBots.push(b);
+
+    b.once("spawn", () => {
+      const interval = setInterval(() => {
+        if (!musketsActive) {
+          clearInterval(interval);
+          return;
+        }
+        b.chat(randomGibberish());
+      }, Math.random()*4000 + 2000);
+    });
+
+    b.on("end", () => {
+      if (musketsActive) setTimeout(spawnBot, 3000);
+    });
+
+    b.on("kicked", () => {
+      if (musketsActive) setTimeout(spawnBot, 5000);
+    });
+
+    b.on("error", ()=>{});
+  }
+
+  spawnBot();
+}
+
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: "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"
@@ -157,6 +208,29 @@ function startBot() {
 
   bot.pathfinder.setGoal(null);
   bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z), true);
+}
+
+        else if (command === '$3muskets') {
+
+  if (!musketsActive) {
+    musketsActive = true;
+
+    createMusket(bot, "Musketeer1");
+    createMusket(bot, "Musketeer2");
+    createMusket(bot, "Musketeer3");
+
+    bot.chat("The three musketeers have arrived.");
+  } else {
+    musketsActive = false;
+
+    musketBots.forEach(b => {
+      try { b.quit(); } catch {}
+    });
+
+    musketBots = [];
+
+    bot.chat("The musketeers vanished.");
+  }
 }
 
     else if (command === '$coords') {
