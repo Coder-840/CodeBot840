@@ -16,7 +16,6 @@ let ignoreMode = true;
 const ignoreAllowed = new Set(['player_840', 'chickentender']);
 
 let hunting = false; // ===== ADDED HUNT MODE FLAG =====
-
 function createMusket(mainBot, username) {
   function spawnBot() {
     if (!musketsActive) return;
@@ -44,7 +43,7 @@ function createMusket(mainBot, username) {
           return;
         }
         b.chat(randomGibberish());
-      }, Math.random()*4000 + 2000);
+      }, Math.random() * 4000 + 2000);
     });
 
     // ===== AUTO REJOIN =====
@@ -53,18 +52,15 @@ function createMusket(mainBot, username) {
       if (musketsActive) setTimeout(spawnBot, 8000);
     });
 
-    b.on("end", () => {
-      console.log(username + " disconnected normally.");
-    });
+    // DO NOT reconnect on normal disconnect
+    b.on("end", () => console.log(username + " disconnected normally."));
 
-    b.on("error", (err) => {
-      console.log(username + " error:", err.message);
-    });
-  } // <--- close spawnBot
+    // prevent crash on minor errors
+    b.on("error", (err) => console.log(username + " error:", err.message));
+  } // <--- closes spawnBot
 
-  spawnBot(); // call it once when createMusket is invoked
-} // <--- close createMusket
-
+  spawnBot(); // call spawnBot once when createMusket is invoked
+} // <--- closes createMusket
 
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
