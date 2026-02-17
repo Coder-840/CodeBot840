@@ -158,7 +158,7 @@ setInterval(() => {
     bot.pvp.attack(target);
   }
 
-}, 500); // run twice per second
+}, 1000); // run twice per second
 
 }); // ← CLOSE SPAWN EVENT HERE
   //Auto-Equip
