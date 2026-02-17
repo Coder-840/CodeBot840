@@ -166,6 +166,7 @@ else if (command === '$hunt') {
     bot.pathfinder.setGoal(null);
   }
 }
+});
 
   //Auto-Equip
   setInterval(() => {
