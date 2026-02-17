@@ -118,82 +118,35 @@ function startBot() {
     bot.pvp.movements.canDig = true;
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
-// ===== HUNT SYSTEM =====
-let hunting = false;
-let huntTarget = null; // null = mobs, string = specific player
-let currentTarget = null;
-
-bot.on('chat', (username, message) => {
-  if (username === bot.username) return;
-
-  const args = message.split(' ');
-  const command = args[0].toLowerCase();
-
-  if (command === '$hunt') {
-    if (!args[1]) {
-      bot.chat('Usage: $hunt on/off or $hunt <player>');
-      return;
-    }
-
-    const arg = args[1].toLowerCase();
-
-    if (arg === 'on') {
-      hunting = true;
-      huntTarget = null;
-      bot.chat('Hunting mode enabled: attacking mobs.');
-    } else if (arg === 'off') {
-      hunting = false;
-      huntTarget = null;
-      currentTarget = null;
-      bot.pvp.stop();
-      bot.chat('Hunting mode disabled.');
-    } else {
-      // assume a player name
-      const targetPlayer = Object.values(bot.entities).find(
-        e => e.type === 'player' && e.username?.toLowerCase() === arg
-      );
-
-      if (!targetPlayer) {
-        bot.chat(`Player "${arg}" not found.`);
-        return;
-      }
-
-      hunting = true;
-      huntTarget = targetPlayer.username;
-      bot.chat(`Hunting mode enabled: attacking ${huntTarget}.`);
-    }
-  }
-});
-
-// ===== HUNT LOOP =====
-
+    // ===== WORKING HUNT LOOP =====
 setInterval(() => {
-  if (!hunting || !huntTarget) return;
+  if (!hunting) return;
   if (!bot.entity) return;
 
-  // Find the target player
   const targets = Object.values(bot.entities)
-    .filter(e => e.type === 'player')
-    .filter(e => e.username === huntTarget) // only consider the target
-    .filter(e => e.username !== bot.username);
+    .filter(e => (e.type === 'mob' || e.type === 'player'))
+    .filter(e => e.username !== bot.username)
+    .filter(e => e.type !== 'player' || !ignoreAllowed.has(e.username?.toLowerCase()));
 
   if (!targets.length) return;
 
+  targets.sort((a, b) =>
+    a.position.distanceTo(bot.entity.position) -
+    b.position.distanceTo(bot.entity.position)
+  );
+
   const target = targets[0];
 
-  // Move toward the target
+  // walk toward target
   bot.pathfinder.setGoal(
     new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
     true
   );
 
-  // Auto-attack if close enough
-  const distance = bot.entity.position.distanceTo(target.position);
-  if (distance < 3) {
-    bot.pvp.attack(target);
-  }
+  // attack target
+  bot.pvp.attack(target);
 
-}, 500); // run more frequently for smoother chasing
+}, 1000);
 
 }); // ← CLOSE SPAWN EVENT HERE
   //Auto-Equip
@@ -273,7 +226,7 @@ setInterval(() => {
             const chunk = para.substring(0, MAX_LENGTH);
             bot.chat(chunk);
             para = para.substring(MAX_LENGTH);
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, 900));
           }
         }
 
@@ -327,25 +280,19 @@ else if (command === '$3muskets') {
     }
 
     // ===== HUNT COMMAND (ADDED) =====
-else if (command === '$hunt') {
-  const targetName = args[1];
-  if (!targetName) {
-    bot.chat('Usage: $hunt <player> / $hunt stop');
-    return;
-  }
-
-  if (targetName.toLowerCase() === 'stop') {
-    hunting = false;
-    huntTarget = null;
-    bot.pvp.stop();
-    bot.chat('Hunting mode disabled.');
-    return;
-  }
-
-  hunting = true;
-  huntTarget = targetName;
-  bot.chat(`Hunting mode enabled. Target: ${huntTarget}`);
-}
+    else if (command === '$hunt') {
+      const arg = args[1]?.toLowerCase();
+      if (arg === 'on') {
+        hunting = true;
+        bot.chat('Hunting mode enabled.');
+      } else if (arg === 'off') {
+        hunting = false;
+        bot.pvp.stop();
+        bot.chat('Hunting mode disabled.');
+      } else {
+        bot.chat('Usage: $hunt on/off');
+      }
+    }
   });
 
   // ===== SERVER EVENTS =====
