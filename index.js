@@ -399,7 +399,7 @@ function safeReconnect(reason) {
   setTimeout(() => {
     reconnecting = false;
     startBot();
-  }, 45000); // 45 seconds (important)
+  }, 5000); // 45 seconds (important)
 }
 
 bot.on('end', () => safeReconnect("end"));
