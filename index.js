@@ -118,49 +118,53 @@ function startBot() {
     bot.pvp.movements.canDig = true;
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
-    // ===== UPDATED HUNT LOOP TO LOG ALL NEARBY ENTITY NAMES =====
+    // ===== REWRITTEN HUNT LOOP: ATTACK ANY PLAYER OR MOB =====
 setInterval(() => {
   if (!hunting) return;
   if (!bot.entity) return;
 
-  // Get all entities around the bot
-  const nearbyEntities = Object.values(bot.entities)
-    .filter(e => e !== bot.entity); // ignore itself
+  // Get all nearby entities, ignore self
+  const nearbyEntities = Object.values(bot.entities).filter(e => e !== bot.entity);
 
   if (!nearbyEntities.length) return;
 
-  // Record exactly what Mineflayer sees
+  // Log exactly what it sees
   nearbyEntities.forEach(e => {
     const entityName = e.username || e.name || `EntityID:${e.id}`;
     console.log(`Seen entity: ${entityName}`);
     chatLogs.push(`Seen entity: ${entityName}`);
   });
-
   if (chatLogs.length > 100) chatLogs = chatLogs.slice(-100);
 
-  // ===== OPTIONAL: continue hunting as before =====
-  const attackable = nearbyEntities
-    .filter(e => (e.type === 'mob' || e.type === 'player'))
-    .filter(e => e.username !== bot.username)
-    .filter(e => e.type !== 'player' || !ignoreAllowed.has(e.username?.toLowerCase()));
+  // ===== Filter attackable entities =====
+  const attackable = nearbyEntities.filter(e => 
+    e.type === 'mob' || e.type === 'player' || (!e.type && e.id)
+  );
 
   if (!attackable.length) return;
 
-  attackable.sort((a, b) =>
+  // ===== Find the nearest target =====
+  attackable.sort((a, b) => 
     a.position.distanceTo(bot.entity.position) -
     b.position.distanceTo(bot.entity.position)
   );
 
   const target = attackable[0];
+  const targetName = target.username || target.name || `EntityID:${target.id}`;
+  console.log(`Attacking target: ${targetName}`);
+  chatLogs.push(`Attacking target: ${targetName}`);
 
-  // Attack
+  // ===== Move toward the target =====
   bot.pathfinder.setGoal(
     new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
     true
   );
+
+  // ===== Attack target =====
   bot.pvp.attack(target);
 
 }, 1000);
+
 }); // ← CLOSE SPAWN EVENT HERE
   //Auto-Equip
   setInterval(() => {
