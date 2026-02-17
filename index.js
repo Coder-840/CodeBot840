@@ -107,67 +107,6 @@ const openrouter = new OpenAI({
   apiKey: "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"
 });
 
-function startBot() {
-  const bot = mineflayer.createBot(botArgs);
-  bot.loadPlugin(pathfinder);
-  bot.loadPlugin(pvp);
-
-  bot.once('spawn', () => {
-    const mcData = require('minecraft-data')(bot.version);
-    bot.pvp.movements = new Movements(bot, mcData);
-    bot.pvp.movements.canDig = true;
-    console.log('CodeBot840 spawned. Combat/Movement ready.');
-
-  let huntLoop = null;
-  let hunting = false;
-
-else if (command === '$hunt') {
-
-  hunting = !hunting;
-  bot.chat(`Hunt ${hunting ? "enabled" : "disabled"}`);
-
-  if (hunting && !huntLoop) {
-
-    huntLoop = setInterval(() => {
-      if (!bot.entity) return;
-
-      const target = bot.nearestEntity(e => {
-        if (!e.position) return false;
-        if (e === bot.entity) return false;
-
-        if (e.type === 'player') {
-          if (!e.username) return false;
-          if (e.username === bot.username) return false;
-          if (ignoreAllowed.has(e.username.toLowerCase())) return false;
-          return true;
-        }
-
-        if (e.type === 'mob') return true;
-
-        return false;
-      });
-
-      if (!target) return;
-
-      bot.pathfinder.setGoal(
-        new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
-        true
-      );
-
-      bot.pvp.attack(target);
-
-    }, 1000);
-
-  }
-
-  if (!hunting && huntLoop) {
-    clearInterval(huntLoop);
-    huntLoop = null;
-    bot.pathfinder.setGoal(null);
-  }
-}
-});
-
   //Auto-Equip
   setInterval(() => {
     const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
@@ -296,6 +235,66 @@ else if (command === '$3muskets') {
       } else {
         bot.chat('Usage: $ignore true/false');
       }
+
+      function startBot() {
+  const bot = mineflayer.createBot(botArgs);
+  bot.loadPlugin(pathfinder);
+  bot.loadPlugin(pvp);
+
+  bot.once('spawn', () => {
+    const mcData = require('minecraft-data')(bot.version);
+    bot.pvp.movements = new Movements(bot, mcData);
+    bot.pvp.movements.canDig = true;
+    console.log('CodeBot840 spawned. Combat/Movement ready.');
+
+  let huntLoop = null;
+  let hunting = false;
+
+else if (command === '$hunt') {
+
+  hunting = !hunting;
+  bot.chat(`Hunt ${hunting ? "enabled" : "disabled"}`);
+
+  if (hunting && !huntLoop) {
+
+    huntLoop = setInterval(() => {
+      if (!bot.entity) return;
+
+      const target = bot.nearestEntity(e => {
+        if (!e.position) return false;
+        if (e === bot.entity) return false;
+
+        if (e.type === 'player') {
+          if (!e.username) return false;
+          if (e.username === bot.username) return false;
+          if (ignoreAllowed.has(e.username.toLowerCase())) return false;
+          return true;
+        }
+
+        if (e.type === 'mob') return true;
+
+        return false;
+      });
+
+      if (!target) return;
+
+      bot.pathfinder.setGoal(
+        new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
+        true
+      );
+
+      bot.pvp.attack(target);
+
+    }, 1000);
+
+  }
+
+  if (!hunting && huntLoop) {
+    clearInterval(huntLoop);
+    huntLoop = null;
+    bot.pathfinder.setGoal(null);
+  }
+}
       
   });
 
