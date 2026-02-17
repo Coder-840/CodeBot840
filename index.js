@@ -7,7 +7,7 @@ const botArgs = {
   host: 'noBnoT.org',
   port: 25565,
   username: 'CodeBot840',
-  version: '1.16'
+  version: false
 };
 
 const PASSWORD = 'YourSecurePassword123';
