@@ -167,15 +167,77 @@ setInterval(() => {
 
 }); // ← CLOSE SPAWN EVENT HERE
   //Auto-Equip
-  setInterval(() => {
-    const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
-    armorTypes.forEach(type => {
-      const armor = bot.inventory.items().find(item => item.name.includes(type));
-      if (armor) bot.equip(armor, type).catch(() => {});
-    });
-    const sword = bot.inventory.items().find(item => item.name.includes('sword'));
-    if (sword) bot.equip(sword, 'hand').catch(() => {});
-  }, 5000);
+
+  // ===== ADVANCED AUTO EQUIP SYSTEM =====
+const mcData = require("minecraft-data")(bot.version);
+
+setInterval(() => {
+  const items = bot.inventory.items();
+  if (!items.length) return;
+
+  // ---------- ARMOR ----------
+  const armorSlots = {
+    head: null,
+    torso: null,
+    legs: null,
+    feet: null
+  };
+
+  for (const item of items) {
+    const data = mcData.itemsByName[item.name];
+    if (!data) continue;
+
+    const armor = data.armorPoints;
+    if (!armor) continue;
+
+    if (item.name.includes("helmet"))
+      if (!armorSlots.head || armor > armorSlots.head.score)
+        armorSlots.head = { item, score: armor };
+
+    if (item.name.includes("chestplate"))
+      if (!armorSlots.torso || armor > armorSlots.torso.score)
+        armorSlots.torso = { item, score: armor };
+
+    if (item.name.includes("leggings"))
+      if (!armorSlots.legs || armor > armorSlots.legs.score)
+        armorSlots.legs = { item, score: armor };
+
+    if (item.name.includes("boots"))
+      if (!armorSlots.feet || armor > armorSlots.feet.score)
+        armorSlots.feet = { item, score: armor };
+  }
+
+  for (const [slot, data] of Object.entries(armorSlots)) {
+    if (!data) continue;
+    const current = bot.inventory.slots[bot.getEquipmentDestSlot(slot)];
+    if (!current || current.name !== data.item.name) {
+      bot.equip(data.item, slot).catch(() => {});
+    }
+  }
+
+  // ---------- WEAPON ----------
+  let bestWeapon = null;
+  let bestDamage = 0;
+
+  for (const item of items) {
+    const data = mcData.itemsByName[item.name];
+    if (!data) continue;
+
+    const damage = data.attackDamage || 0;
+    if (damage > bestDamage) {
+      bestDamage = damage;
+      bestWeapon = item;
+    }
+  }
+
+  if (bestWeapon) {
+    const held = bot.heldItem;
+    if (!held || held.name !== bestWeapon.name) {
+      bot.equip(bestWeapon, "hand").catch(() => {});
+    }
+  }
+
+}, 3000);
 
   // ===== CHAT HANDLER =====
   bot.on('chat', async (username, message) => {
