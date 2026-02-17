@@ -166,69 +166,34 @@ bot.on('chat', (username, message) => {
 });
 
 // ===== HUNT LOOP =====
-setInterval(() => {
-  if (!hunting || !bot.entity) return;
 
-  let targets = Object.values(bot.entities).filter(e => e.position);
+    setInterval(() => {
+  if (!hunting || !huntTarget) return;
+  if (!bot.entity) return;
 
-  if (huntTarget) {
-    // attack only the specific player
-    targets = targets.filter(e => e.type === 'player' && e.username === huntTarget);
-  } else {
-    // attack mobs normally
-    targets = targets.filter(e => e.type === 'mob');
-  }
+  // Find the target player by username
+  const targets = Object.values(bot.entities)
+    .filter(e => e.type === 'player')
+    .filter(e => e.username === huntTarget)
+    .filter(e => e.username !== bot.username);
 
-  if (!targets.length) {
-    bot.pvp.stop();
-    currentTarget = null;
-    return;
-  }
-
-  // instant aggro on nearby player if within 6 blocks
-  if (!huntTarget) {
-    const nearbyPlayer = Object.values(bot.entities).find(
-      e => e.type === 'player' && e.position.distanceTo(bot.entity.position) < 6
-    );
-    if (nearbyPlayer) {
-      currentTarget = nearbyPlayer;
-      bot.pvp.attack(nearbyPlayer);
-      return;
-    }
-  }
-
-  // pick closest target
-  targets.sort((a, b) =>
-    a.position.distanceTo(bot.entity.position) -
-    b.position.distanceTo(bot.entity.position)
-  );
+  if (!targets.length) return;
 
   const target = targets[0];
 
-  if (bot.pvp.target !== target) {
+  // Move toward the target
+  bot.pathfinder.setGoal(
+    new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
+    true
+  );
+
+  // Attack if close
+  const distance = bot.entity.position.distanceTo(target.position);
+  if (distance < 3) {
     bot.pvp.attack(target);
-    currentTarget = target;
   }
 
-  // movement + sprint
-  const dist = target.position.distanceTo(bot.entity.position);
-  if (dist > 3) {
-    bot.setControlState('sprint', true);
-    bot.pathfinder.setGoal(
-      new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
-      true
-    );
-  } else {
-    bot.setControlState('sprint', false);
-  }
-
-  // crit jump if close
-  if (dist < 4 && bot.entity.onGround) {
-    bot.setControlState('jump', true);
-    setTimeout(() => bot.setControlState('jump', false), 250);
-  }
-
-}, 250);
+}, 1000);
 
 }); // ← CLOSE SPAWN EVENT HERE
   //Auto-Equip
@@ -362,19 +327,25 @@ else if (command === '$3muskets') {
     }
 
     // ===== HUNT COMMAND (ADDED) =====
-    else if (command === '$hunt') {
-      const arg = args[1]?.toLowerCase();
-      if (arg === 'on') {
-        hunting = true;
-        bot.chat('Hunting mode enabled.');
-      } else if (arg === 'off') {
-        hunting = false;
-        bot.pvp.stop();
-        bot.chat('Hunting mode disabled.');
-      } else {
-        bot.chat('Usage: $hunt on/off');
-      }
-    }
+else if (command === '$hunt') {
+  const targetName = args[1];
+  if (!targetName) {
+    bot.chat('Usage: $hunt <player> / $hunt stop');
+    return;
+  }
+
+  if (targetName.toLowerCase() === 'stop') {
+    hunting = false;
+    huntTarget = null;
+    bot.pvp.stop();
+    bot.chat('Hunting mode disabled.');
+    return;
+  }
+
+  hunting = true;
+  huntTarget = targetName;
+  bot.chat(`Hunting mode enabled. Target: ${huntTarget}`);
+}
   });
 
   // ===== SERVER EVENTS =====
