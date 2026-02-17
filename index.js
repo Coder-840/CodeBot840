@@ -387,20 +387,24 @@ else if (command === '$3muskets') {
       if (chatLogs.length > 100) chatLogs.shift();
     }
   });
-    bot.on('kicked', (reason) => {
-    console.log('Kicked:', reason);
-    setTimeout(startBot, 10000);
-  });
 
-  bot.on('error', (err) => {
-    console.log('Error:', err.message);
-    setTimeout(startBot, 10000);
-  });
+  let reconnecting = false;
 
-  bot.on('end', () => {
-    console.log('Disconnected. Reconnecting in 10s...');
-    setTimeout(startBot, 10000);
-  });
+function safeReconnect(reason) {
+  if (reconnecting) return;
+  reconnecting = true;
+
+  console.log("Reconnect triggered:", reason);
+
+  setTimeout(() => {
+    reconnecting = false;
+    startBot();
+  }, 45000); // 45 seconds (important)
+}
+
+bot.on('end', () => safeReconnect("end"));
+bot.on('kicked', r => safeReconnect("kicked"));
+bot.on('error', e => console.log("Error:", e.message));
 }
 
 startBot();
