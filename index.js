@@ -387,9 +387,21 @@ else if (command === '$3muskets') {
       if (chatLogs.length > 100) chatLogs.shift();
     }
   });
+    bot.on('kicked', (reason) => {
+    console.log('Kicked:', reason);
+    setTimeout(startBot, 10000);
+  });
 
-  bot.on('kicked', () => setTimeout(startBot, 10000));
-  bot.on('error', () => setTimeout(startBot, 10000));
+  bot.on('error', (err) => {
+    console.log('Error:', err.message);
+    setTimeout(startBot, 10000);
+  });
+
+  bot.on('end', () => {
+    console.log('Disconnected. Reconnecting in 10s...');
+    setTimeout(startBot, 10000);
+  });
+}
 }
 
 startBot();
