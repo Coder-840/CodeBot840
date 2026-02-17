@@ -160,6 +160,7 @@ setInterval(() => {
   bot.pvp.attack(target);
 
 }, 1000);
+});
 
   //Auto-Equip
   setInterval(() => {
