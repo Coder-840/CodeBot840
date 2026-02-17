@@ -160,6 +160,8 @@ setInterval(() => {
   bot.pvp.attack(target);
 
 }, 1000);
+    
+}); // ← CLOSE SPAWN EVENT HERE
 
   //Auto-Equip
   setInterval(() => {
