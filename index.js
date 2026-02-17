@@ -118,52 +118,47 @@ function startBot() {
     bot.pvp.movements.canDig = true;
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
-    // ===== REWRITTEN HUNT LOOP: ATTACK ANY PLAYER OR MOB =====
+let currentTarget = null;
+
 setInterval(() => {
-  if (!hunting) return;
+  if (!hunting) {
+    bot.pvp.stop();
+    bot.pathfinder.setGoal(null);
+    currentTarget = null;
+    return;
+  }
   if (!bot.entity) return;
 
-  // Get all nearby entities, ignore self
-  const nearbyEntities = Object.values(bot.entities).filter(e => e !== bot.entity);
+  // Find nearest attackable entity
+  const attackable = Object.values(bot.entities)
+    .filter(e => e !== bot.entity)
+    .filter(e => e.type === 'mob' || e.type === 'player' || (!e.type && e.id));
 
-  if (!nearbyEntities.length) return;
+  if (!attackable.length) {
+    bot.pvp.stop();
+    bot.pathfinder.setGoal(null);
+    currentTarget = null;
+    return;
+  }
 
-  // Log exactly what it sees
-  nearbyEntities.forEach(e => {
-    const entityName = e.username || e.name || `EntityID:${e.id}`;
-    console.log(`Seen entity: ${entityName}`);
-    chatLogs.push(`Seen entity: ${entityName}`);
-  });
-  if (chatLogs.length > 100) chatLogs = chatLogs.slice(-100);
-
-  // ===== Filter attackable entities =====
-  const attackable = nearbyEntities.filter(e => 
-    e.type === 'mob' || e.type === 'player' || (!e.type && e.id)
-  );
-
-  if (!attackable.length) return;
-
-  // ===== Find the nearest target =====
-  attackable.sort((a, b) => 
-    a.position.distanceTo(bot.entity.position) -
-    b.position.distanceTo(bot.entity.position)
-  );
-
+  attackable.sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
   const target = attackable[0];
-  const targetName = target.username || target.name || `EntityID:${target.id}`;
-  console.log(`Attacking target: ${targetName}`);
-  chatLogs.push(`Attacking target: ${targetName}`);
 
-  // ===== Move toward the target =====
-  bot.pathfinder.setGoal(
-    new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
-    true
-  );
+  // Only update goal if target changed
+  if (!currentTarget || currentTarget.id !== target.id) {
+    currentTarget = target;
+    bot.pathfinder.setGoal(
+      new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
+      true
+    );
+  }
 
-  // ===== Attack target =====
-  bot.pvp.attack(target);
+  // Attack safely
+  if (!bot.pvp.target || bot.pvp.target.id !== target.id) {
+    bot.pvp.attack(target);
+  }
 
-}, 1000);
+}, 500); // run twice per second
 
 }); // ← CLOSE SPAWN EVENT HERE
   //Auto-Equip
