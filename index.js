@@ -118,35 +118,72 @@ function startBot() {
     bot.pvp.movements.canDig = true;
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
-    // ===== WORKING HUNT LOOP =====
+// ===== SMART HUNT LOOP =====
+let currentTarget = null;
+
 setInterval(() => {
   if (!hunting) return;
   if (!bot.entity) return;
 
-  const targets = Object.values(bot.entities)
-    .filter(e => (e.type === 'mob' || e.type === 'player'))
+  const entities = Object.values(bot.entities);
+
+  const targets = entities
+    .filter(e => e.type === 'mob' || e.type === 'player')
     .filter(e => e.username !== bot.username)
-    .filter(e => e.type !== 'player' || !ignoreAllowed.has(e.username?.toLowerCase()));
+    .filter(e => e.type !== 'player' || !ignoreAllowed.has(e.username?.toLowerCase()))
+    .filter(e => e.position.distanceTo(bot.entity.position) < 32);
 
-  if (!targets.length) return;
+  if (!targets.length) {
+    currentTarget = null;
+    bot.pvp.stop();
+    return;
+  }
 
-  targets.sort((a, b) =>
-    a.position.distanceTo(bot.entity.position) -
-    b.position.distanceTo(bot.entity.position)
-  );
+  // ===== PRIORITIZE PLAYERS =====
+  targets.sort((a, b) => {
+    const distA = a.position.distanceTo(bot.entity.position);
+    const distB = b.position.distanceTo(bot.entity.position);
 
-  const target = targets[0];
+    const priA = a.type === 'player' ? 0 : 1000;
+    const priB = b.type === 'player' ? 0 : 1000;
 
-  // walk toward target
-  bot.pathfinder.setGoal(
-    new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
-    true
-  );
+    return (priA + distA) - (priB + distB);
+  });
 
-  // attack target
-  bot.pvp.attack(target);
+  const best = targets[0];
 
-}, 1000);
+  // ===== SWITCH TARGET IF BETTER ONE FOUND =====
+  if (!currentTarget || currentTarget.id !== best.id) {
+    currentTarget = best;
+    bot.pvp.attack(best);
+  }
+
+  const dist = best.position.distanceTo(bot.entity.position);
+
+  // ===== CHASE LOGIC =====
+  if (dist > 3) {
+    bot.setControlState('sprint', true);
+
+    bot.pathfinder.setGoal(
+      new goals.GoalNear(
+        best.position.x,
+        best.position.y,
+        best.position.z,
+        2
+      ),
+      true
+    );
+  } else {
+    bot.setControlState('sprint', false);
+  }
+
+  // ===== CRIT JUMP WHEN CLOSE =====
+  if (dist < 4 && bot.entity.onGround) {
+    bot.setControlState('jump', true);
+    setTimeout(() => bot.setControlState('jump', false), 250);
+  }
+
+}, 250);
 
 }); // ← CLOSE SPAWN EVENT HERE
   //Auto-Equip
