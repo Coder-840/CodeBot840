@@ -130,19 +130,22 @@ setInterval(() => {
   // attack mobs always
   if (e.type === 'mob') return true;
 
-  // attack players unless ignored
+  // attack players
   if (e.type === 'player') {
-    if (!e.username) return false;
+    if (e === bot.entity) return false;
     if (e.username === bot.username) return false;
-    if (ignoreAllowed.has(e.username.toLowerCase())) return false;
+
+    if (e.username && ignoreAllowed.has(e.username.toLowerCase()))
+      return false;
+
     return true;
   }
 
   return false;
 });
 
-
-  const target = targets[0];
+  const target = bot.nearestEntity(e => targets.includes(e));
+if (!target) return;
 
   // walk toward target
   bot.pathfinder.setGoal(
