@@ -118,47 +118,49 @@ function startBot() {
     bot.pvp.movements.canDig = true;
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
-    // ===== WORKING HUNT LOOP =====
 setInterval(() => {
   if (!hunting) return;
   if (!bot.entity) return;
 
+  // Find all valid targets
   const targets = Object.values(bot.entities).filter(e => {
-  if (!e.position) return false;
-  if (e === bot.entity) return false;
-
-  // attack mobs always
-  if (e.type === 'mob') return true;
-
-  // attack players
-  if (e.type === 'player') {
+    if (!e.position) return false;
     if (e === bot.entity) return false;
-    if (e.username === bot.username) return false;
 
-    if (e.username && ignoreAllowed.has(e.username.toLowerCase()))
-      return false;
+    if (e.type === 'mob') return true;
 
-    return true;
+    if (e.type === 'player') {
+      if (!e.username) return false;
+      if (e.username === bot.username) return false;
+      if (ignoreAllowed.has(e.username.toLowerCase())) return false;
+      return true;
+    }
+
+    return false;
+  });
+
+  if (!targets.length) return;
+
+  // Pick nearest target (player or mob)
+  const target = bot.nearestEntity(e => targets.includes(e));
+  if (!target) return;
+
+  // Only reset goal if new target or previous goal finished
+  const goal = bot.pathfinder.getGoal();
+  const targetPos = target.position.offset(0, 0, 0); // safe copy
+
+  if (!goal || goal.x !== targetPos.x || goal.y !== targetPos.y || goal.z !== targetPos.z) {
+    bot.pathfinder.setGoal(
+      new goals.GoalNear(targetPos.x, targetPos.y, targetPos.z, 2),
+      true
+    );
   }
 
-  return false;
-});
-
-  const target = bot.nearestEntity(e => targets.includes(e));
-if (!target) return;
-
-  // walk toward target
-  bot.pathfinder.setGoal(
-    new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
-    true
-  );
-
-  // attack target
+  // Attack if in range
   bot.pvp.attack(target);
 
-}, 100);
+}, 1000);
 
-}); // ← CLOSE SPAWN EVENT HERE
   //Auto-Equip
   setInterval(() => {
     const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
