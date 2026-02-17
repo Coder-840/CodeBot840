@@ -118,66 +118,111 @@ function startBot() {
     bot.pvp.movements.canDig = true;
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
-// ===== SMART HUNT LOOP =====
+// ===== HUNT SYSTEM =====
+let hunting = false;
+let huntTarget = null; // null = mobs, string = specific player
 let currentTarget = null;
 
+bot.on('chat', (username, message) => {
+  if (username === bot.username) return;
+
+  const args = message.split(' ');
+  const command = args[0].toLowerCase();
+
+  if (command === '$hunt') {
+    if (!args[1]) {
+      bot.chat('Usage: $hunt on/off or $hunt <player>');
+      return;
+    }
+
+    const arg = args[1].toLowerCase();
+
+    if (arg === 'on') {
+      hunting = true;
+      huntTarget = null;
+      bot.chat('Hunting mode enabled: attacking mobs.');
+    } else if (arg === 'off') {
+      hunting = false;
+      huntTarget = null;
+      currentTarget = null;
+      bot.pvp.stop();
+      bot.chat('Hunting mode disabled.');
+    } else {
+      // assume a player name
+      const targetPlayer = Object.values(bot.entities).find(
+        e => e.type === 'player' && e.username?.toLowerCase() === arg
+      );
+
+      if (!targetPlayer) {
+        bot.chat(`Player "${arg}" not found.`);
+        return;
+      }
+
+      hunting = true;
+      huntTarget = targetPlayer.username;
+      bot.chat(`Hunting mode enabled: attacking ${huntTarget}.`);
+    }
+  }
+});
+
+// ===== HUNT LOOP =====
 setInterval(() => {
-  if (!hunting) return;
-  if (!bot.entity) return;
+  if (!hunting || !bot.entity) return;
 
-  const entities = Object.values(bot.entities);
+  let targets = Object.values(bot.entities).filter(e => e.position);
 
-  const targets = entities
-    .filter(e => e.type === 'mob' || e.type === 'player')
-    .filter(e => e.username !== bot.username)
-    .filter(e => e.type !== 'player' || !ignoreAllowed.has(e.username?.toLowerCase()))
-    .filter(e => e.position.distanceTo(bot.entity.position) < 32);
+  if (huntTarget) {
+    // attack only the specific player
+    targets = targets.filter(e => e.type === 'player' && e.username === huntTarget);
+  } else {
+    // attack mobs normally
+    targets = targets.filter(e => e.type === 'mob');
+  }
 
   if (!targets.length) {
-    currentTarget = null;
     bot.pvp.stop();
+    currentTarget = null;
     return;
   }
 
-  // ===== PRIORITIZE PLAYERS =====
-  targets.sort((a, b) => {
-    const distA = a.position.distanceTo(bot.entity.position);
-    const distB = b.position.distanceTo(bot.entity.position);
-
-    const priA = a.type === 'player' ? 0 : 1000;
-    const priB = b.type === 'player' ? 0 : 1000;
-
-    return (priA + distA) - (priB + distB);
-  });
-
-  const best = targets[0];
-
-  // ===== SWITCH TARGET IF BETTER ONE FOUND =====
-  if (!currentTarget || currentTarget.id !== best.id) {
-    currentTarget = best;
-    bot.pvp.attack(best);
+  // instant aggro on nearby player if within 6 blocks
+  if (!huntTarget) {
+    const nearbyPlayer = Object.values(bot.entities).find(
+      e => e.type === 'player' && e.position.distanceTo(bot.entity.position) < 6
+    );
+    if (nearbyPlayer) {
+      currentTarget = nearbyPlayer;
+      bot.pvp.attack(nearbyPlayer);
+      return;
+    }
   }
 
-  const dist = best.position.distanceTo(bot.entity.position);
+  // pick closest target
+  targets.sort((a, b) =>
+    a.position.distanceTo(bot.entity.position) -
+    b.position.distanceTo(bot.entity.position)
+  );
 
-  // ===== CHASE LOGIC =====
+  const target = targets[0];
+
+  if (bot.pvp.target !== target) {
+    bot.pvp.attack(target);
+    currentTarget = target;
+  }
+
+  // movement + sprint
+  const dist = target.position.distanceTo(bot.entity.position);
   if (dist > 3) {
     bot.setControlState('sprint', true);
-
     bot.pathfinder.setGoal(
-      new goals.GoalNear(
-        best.position.x,
-        best.position.y,
-        best.position.z,
-        2
-      ),
+      new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
       true
     );
   } else {
     bot.setControlState('sprint', false);
   }
 
-  // ===== CRIT JUMP WHEN CLOSE =====
+  // crit jump if close
   if (dist < 4 && bot.entity.onGround) {
     bot.setControlState('jump', true);
     setTimeout(() => bot.setControlState('jump', false), 250);
