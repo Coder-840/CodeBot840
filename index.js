@@ -402,6 +402,5 @@ else if (command === '$3muskets') {
     setTimeout(startBot, 10000);
   });
 }
-}
 
 startBot();
