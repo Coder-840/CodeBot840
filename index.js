@@ -148,8 +148,8 @@ setInterval(() => {
 
 }, 1000);
 
-
-  // ===== AUTO-EQUIP =====
+}); // ← CLOSE SPAWN EVENT HERE
+  //Auto-Equip
   setInterval(() => {
     const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
     armorTypes.forEach(type => {
