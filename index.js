@@ -167,14 +167,14 @@ bot.on('chat', (username, message) => {
 
 // ===== HUNT LOOP =====
 
-    setInterval(() => {
+setInterval(() => {
   if (!hunting || !huntTarget) return;
   if (!bot.entity) return;
 
-  // Find the target player by username
+  // Find the target player
   const targets = Object.values(bot.entities)
     .filter(e => e.type === 'player')
-    .filter(e => e.username === huntTarget)
+    .filter(e => e.username === huntTarget) // only consider the target
     .filter(e => e.username !== bot.username);
 
   if (!targets.length) return;
@@ -187,13 +187,13 @@ bot.on('chat', (username, message) => {
     true
   );
 
-  // Attack if close
+  // Auto-attack if close enough
   const distance = bot.entity.position.distanceTo(target.position);
   if (distance < 3) {
     bot.pvp.attack(target);
   }
 
-}, 1000);
+}, 500); // run more frequently for smoother chasing
 
 }); // ← CLOSE SPAWN EVENT HERE
   //Auto-Equip
