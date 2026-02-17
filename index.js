@@ -118,45 +118,49 @@ function startBot() {
     bot.pvp.movements.canDig = true;
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
-    // ===== WORKING HUNT LOOP =====
-// ===== UPDATED HUNT LOOP WITH TARGET RECORDING =====
+    // ===== UPDATED HUNT LOOP TO LOG ALL NEARBY ENTITY NAMES =====
 setInterval(() => {
   if (!hunting) return;
   if (!bot.entity) return;
 
-  // Filter nearby entities
-  const targets = Object.values(bot.entities)
+  // Get all entities around the bot
+  const nearbyEntities = Object.values(bot.entities)
+    .filter(e => e !== bot.entity); // ignore itself
+
+  if (!nearbyEntities.length) return;
+
+  // Record exactly what Mineflayer sees
+  nearbyEntities.forEach(e => {
+    const entityName = e.username || e.name || `EntityID:${e.id}`;
+    console.log(`Seen entity: ${entityName}`);
+    chatLogs.push(`Seen entity: ${entityName}`);
+  });
+
+  if (chatLogs.length > 100) chatLogs = chatLogs.slice(-100);
+
+  // ===== OPTIONAL: continue hunting as before =====
+  const attackable = nearbyEntities
     .filter(e => (e.type === 'mob' || e.type === 'player'))
     .filter(e => e.username !== bot.username)
     .filter(e => e.type !== 'player' || !ignoreAllowed.has(e.username?.toLowerCase()));
 
-  if (!targets.length) return;
+  if (!attackable.length) return;
 
-  // Sort by distance
-  targets.sort((a, b) =>
+  attackable.sort((a, b) =>
     a.position.distanceTo(bot.entity.position) -
     b.position.distanceTo(bot.entity.position)
   );
 
-  const target = targets[0];
+  const target = attackable[0];
 
-  // Record the exact entity name
-  let targetName = target.username || target.name || `EntityID:${target.id}`;
-  console.log(`Hunting target: ${targetName}`);
-  chatLogs.push(`Hunting target: ${targetName}`);
-  if (chatLogs.length > 100) chatLogs.shift();
-
-  // Walk toward target
+  // Attack
   bot.pathfinder.setGoal(
     new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
     true
   );
-
-  // Attack target
   bot.pvp.attack(target);
 
 }, 1000);
-
 }); // ← CLOSE SPAWN EVENT HERE
   //Auto-Equip
   setInterval(() => {
