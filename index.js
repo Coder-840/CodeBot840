@@ -119,10 +119,12 @@ function startBot() {
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
     // ===== WORKING HUNT LOOP =====
+// ===== UPDATED HUNT LOOP WITH TARGET RECORDING =====
 setInterval(() => {
   if (!hunting) return;
   if (!bot.entity) return;
 
+  // Filter nearby entities
   const targets = Object.values(bot.entities)
     .filter(e => (e.type === 'mob' || e.type === 'player'))
     .filter(e => e.username !== bot.username)
@@ -130,6 +132,7 @@ setInterval(() => {
 
   if (!targets.length) return;
 
+  // Sort by distance
   targets.sort((a, b) =>
     a.position.distanceTo(bot.entity.position) -
     b.position.distanceTo(bot.entity.position)
@@ -137,13 +140,19 @@ setInterval(() => {
 
   const target = targets[0];
 
-  // walk toward target
+  // Record the exact entity name
+  let targetName = target.username || target.name || `EntityID:${target.id}`;
+  console.log(`Hunting target: ${targetName}`);
+  chatLogs.push(`Hunting target: ${targetName}`);
+  if (chatLogs.length > 100) chatLogs.shift();
+
+  // Walk toward target
   bot.pathfinder.setGoal(
     new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
     true
   );
 
-  // attack target
+  // Attack target
   bot.pvp.attack(target);
 
 }, 1000);
