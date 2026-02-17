@@ -156,7 +156,7 @@ if (!target) return;
   // attack target
   bot.pvp.attack(target);
 
-}, 1000);
+}, 100);
 
 }); // ← CLOSE SPAWN EVENT HERE
   //Auto-Equip
