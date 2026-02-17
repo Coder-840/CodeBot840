@@ -118,29 +118,36 @@ function startBot() {
     bot.pvp.movements.canDig = true;
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
-    // ===== HUNT LOOP (ADDED) =====
-    setInterval(() => {
-      if (!hunting) return;
-      if (!bot.entity) return;
+    // ===== WORKING HUNT LOOP =====
+setInterval(() => {
+  if (!hunting) return;
+  if (!bot.entity) return;
 
-      const targets = Object.values(bot.entities)
-        .filter(e => (e.type === 'mob' || e.type === 'player'))
-        .filter(e => e.position.distanceTo(bot.entity.position) < 6)
-        .filter(e => e.username !== bot.username)
-        .filter(e => e.type !== 'player' || !ignoreAllowed.has(e.username?.toLowerCase()));
+  const targets = Object.values(bot.entities)
+    .filter(e => (e.type === 'mob' || e.type === 'player'))
+    .filter(e => e.username !== bot.username)
+    .filter(e => e.type !== 'player' || !ignoreAllowed.has(e.username?.toLowerCase()));
 
-      if (!targets.length) return;
+  if (!targets.length) return;
 
-      targets.sort((a,b)=>
-        a.position.distanceTo(bot.entity.position) -
-        b.position.distanceTo(bot.entity.position)
-      );
+  targets.sort((a, b) =>
+    a.position.distanceTo(bot.entity.position) -
+    b.position.distanceTo(bot.entity.position)
+  );
 
-      const target = targets[0];
-      bot.pvp.attack(target);
+  const target = targets[0];
 
-    }, 1000);
-  });
+  // walk toward target
+  bot.pathfinder.setGoal(
+    new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
+    true
+  );
+
+  // attack target
+  bot.pvp.attack(target);
+
+}, 1000);
+
 
   // ===== AUTO-EQUIP =====
   setInterval(() => {
