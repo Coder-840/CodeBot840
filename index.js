@@ -123,17 +123,24 @@ setInterval(() => {
   if (!hunting) return;
   if (!bot.entity) return;
 
-  const targets = Object.values(bot.entities)
-    .filter(e => (e.type === 'mob' || e.type === 'player'))
-    .filter(e => e.username !== bot.username)
-    .filter(e => e.type !== 'player' || !ignoreAllowed.has(e.username?.toLowerCase()));
+  const targets = Object.values(bot.entities).filter(e => {
+  if (!e.position) return false;
+  if (e === bot.entity) return false;
 
-  if (!targets.length) return;
+  // attack mobs always
+  if (e.type === 'mob') return true;
 
-  targets.sort((a, b) =>
-    a.position.distanceTo(bot.entity.position) -
-    b.position.distanceTo(bot.entity.position)
-  );
+  // attack players unless ignored
+  if (e.type === 'player') {
+    if (!e.username) return false;
+    if (e.username === bot.username) return false;
+    if (ignoreAllowed.has(e.username.toLowerCase())) return false;
+    return true;
+  }
+
+  return false;
+});
+
 
   const target = targets[0];
 
