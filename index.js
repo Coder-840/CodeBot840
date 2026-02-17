@@ -118,49 +118,54 @@ function startBot() {
     bot.pvp.movements.canDig = true;
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
-setInterval(() => {
-  if (!hunting) return;
-  if (!bot.entity) return;
+  let huntLoop = null;
+  let hunting = false;
 
-  // Find all valid targets
-  const targets = Object.values(bot.entities).filter(e => {
-    if (!e.position) return false;
-    if (e === bot.entity) return false;
+else if (command === '$hunt') {
 
-    if (e.type === 'mob') return true;
+  hunting = !hunting;
+  bot.chat(`Hunt ${hunting ? "enabled" : "disabled"}`);
 
-    if (e.type === 'player') {
-      if (!e.username) return false;
-      if (e.username === bot.username) return false;
-      if (ignoreAllowed.has(e.username.toLowerCase())) return false;
-      return true;
-    }
+  if (hunting && !huntLoop) {
 
-    return false;
-  });
+    huntLoop = setInterval(() => {
+      if (!bot.entity) return;
 
-  if (!targets.length) return;
+      const target = bot.nearestEntity(e => {
+        if (!e.position) return false;
+        if (e === bot.entity) return false;
 
-  // Pick nearest target (player or mob)
-  const target = bot.nearestEntity(e => targets.includes(e));
-  if (!target) return;
+        if (e.type === 'player') {
+          if (!e.username) return false;
+          if (e.username === bot.username) return false;
+          if (ignoreAllowed.has(e.username.toLowerCase())) return false;
+          return true;
+        }
 
-  // Only reset goal if new target or previous goal finished
-  const goal = bot.pathfinder.getGoal();
-  const targetPos = target.position.offset(0, 0, 0); // safe copy
+        if (e.type === 'mob') return true;
 
-  if (!goal || goal.x !== targetPos.x || goal.y !== targetPos.y || goal.z !== targetPos.z) {
-    bot.pathfinder.setGoal(
-      new goals.GoalNear(targetPos.x, targetPos.y, targetPos.z, 2),
-      true
-    );
+        return false;
+      });
+
+      if (!target) return;
+
+      bot.pathfinder.setGoal(
+        new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
+        true
+      );
+
+      bot.pvp.attack(target);
+
+    }, 1000);
+
   }
 
-  // Attack if in range
-  bot.pvp.attack(target);
-
-}, 1000);
-});
+  if (!hunting && huntLoop) {
+    clearInterval(huntLoop);
+    huntLoop = null;
+    bot.pathfinder.setGoal(null);
+  }
+}
 
   //Auto-Equip
   setInterval(() => {
@@ -290,22 +295,7 @@ else if (command === '$3muskets') {
       } else {
         bot.chat('Usage: $ignore true/false');
       }
-    }
-
-    // ===== HUNT COMMAND (ADDED) =====
-    else if (command === '$hunt') {
-      const arg = args[1]?.toLowerCase();
-      if (arg === 'on') {
-        hunting = true;
-        bot.chat('Hunting mode enabled.');
-      } else if (arg === 'off') {
-        hunting = false;
-        bot.pvp.stop();
-        bot.chat('Hunting mode disabled.');
-      } else {
-        bot.chat('Usage: $hunt on/off');
-      }
-    }
+      
   });
 
   // ===== SERVER EVENTS =====
