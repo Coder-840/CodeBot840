@@ -300,7 +300,7 @@ setInterval(() => {
             const chunk = para.substring(0, MAX_LENGTH);
             bot.chat(chunk);
             para = para.substring(MAX_LENGTH);
-            await new Promise(r => setTimeout(r, 900));
+            await new Promise(r => setTimeout(r, 2000));
           }
         }
 
