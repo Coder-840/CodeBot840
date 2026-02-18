@@ -326,12 +326,16 @@ bot.on('chat',async(username,message)=>{
 });
 
 bot.on("messagestr", msg => {
+  // Remove color codes if present
+  const cleanMsg = msg.replace(/§./g, "").trim();
 
-  const match = msg.match(/SERVER:\s*([A-Za-z0-9_]+)\sjoined\./i);
+  // Match any line ending with "joined."
+  const match = cleanMsg.match(/^SERVER:\s*([A-Za-z0-9_]+)\sjoined\.?/i);
   if (!match) return;
 
   const name = match[1];
 
+  // Case-insensitive key lookup
   const key = Object.keys(pendingMessages)
     .find(k => k.toLowerCase() === name.toLowerCase());
 
