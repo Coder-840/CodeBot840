@@ -326,29 +326,29 @@ bot.on('chat',async(username,message)=>{
 });
 
 bot.on("messagestr", msg => {
-  // Remove color codes if present
-  const cleanMsg = msg.replace(/§./g, "").trim();
+  try {
+    const match = msg.match(/SERVER:\s*([A-Za-z0-9_]+)\sjoined\./i);
+    if (!match) return;
 
-  // Match any line ending with "joined."
-  const match = cleanMsg.match(/^SERVER:\s*([A-Za-z0-9_]+)\sjoined\.?/i);
-  if (!match) return;
+    const name = match[1];
 
-  const name = match[1];
+    const key = Object.keys(pendingMessages)
+      .find(k => k.toLowerCase() === name.toLowerCase());
+    if (!key) return;
 
-  // Case-insensitive key lookup
-  const key = Object.keys(pendingMessages)
-    .find(k => k.toLowerCase() === name.toLowerCase());
+    const msgs = pendingMessages[key];
+    if (!Array.isArray(msgs) || !msgs.length) return;
 
-  if (!key) return;
+    msgs.forEach(m => {
+      bot.chat(`/msg ${name} ${m.from} said "${m.text}"`);
+    });
 
-  const msgs = pendingMessages[key];
+    delete pendingMessages[key];
+    saveMessages(pendingMessages);
 
-  msgs.forEach(m => {
-    bot.chat(`/msg ${name} ${m.from} said "${m.text}"`);
-  });
-
-  delete pendingMessages[key];
-  saveMessages(pendingMessages);
+  } catch (err) {
+    console.error("Messenger handler error:", err);
+  }
 });
 
 bot.on('entityDeath',(entity)=>{
