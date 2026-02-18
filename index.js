@@ -140,10 +140,18 @@ function startBot() {
       if (!hunting) return;
       if (!bot.entity) return;
 
-      const targets = Object.values(bot.entities)
-        .filter(e => (e.type === 'mob' || e.type === 'player'))
-        .filter(e => e.username !== bot.username)
-        .filter(e => e.type !== 'player' || !ignoreAllowed.has(e.username?.toLowerCase()));
+       = Object.values(bot.entities)
+  .filter(e =>
+    e.type === 'mob' ||
+    e.type === 'player' ||
+    e.name === 'Entity' // catches EntityID players
+  )
+  .filter(e => e !== bot.entity)
+  .filter(e => {
+    if (e.type !== 'player') return true;
+    if (!e.username) return true; // attack unnamed players
+    return !ignoreAllowed.has(e.username.toLowerCase());
+  });
 
       if (!targets.length) return;
 
@@ -342,7 +350,7 @@ function startBot() {
     if (message.includes('/login')) bot.chat(`/login ${PASSWORD}`);
 
     // Detect joins for offline messages
-    const joinMatch = message.match(/(\w+) joined the game/);
+    const joinMatch = message.match(/([A-Za-z0-9_]+) joined/);
     if (joinMatch) {
       const key = joinMatch[1].toLowerCase();
       if (offlineMessages[key]?.length) {
