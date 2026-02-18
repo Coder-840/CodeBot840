@@ -165,7 +165,7 @@ function startBot() {
 
       bot.pvp.attack(target);
 
-    }, 1000);
+    }, 2000);
   });
 
   // Auto-Equip
