@@ -325,26 +325,25 @@ bot.on('chat',async(username,message)=>{
   }
 });
 
-bot.on('messagestr',(message)=>{
-  console.log(`SERVER: ${message}`);
-  chatLogs.push(`SERVER: ${message}`);
-  if(chatLogs.length>100)chatLogs.shift();
+bot.on("messagestr", msg => {
 
-  if(message.includes('/register'))bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
-  if(message.includes('/login'))bot.chat(`/login ${PASSWORD}`);
-});
+  const match = msg.match(/SERVER:\s*([A-Za-z0-9_]+)\sjoined\./i);
+  if (!match) return;
 
-bot.on("playerJoined",player=>{
-  const name=player.username;
-  if(!pendingMessages[name])return;
+  const name = match[1];
 
-  const msgs=pendingMessages[name];
+  const key = Object.keys(pendingMessages)
+    .find(k => k.toLowerCase() === name.toLowerCase());
 
-  msgs.forEach(m=>{
+  if (!key) return;
+
+  const msgs = pendingMessages[key];
+
+  msgs.forEach(m => {
     bot.chat(`/msg ${name} ${m.from} said "${m.text}"`);
   });
 
-  delete pendingMessages[name];
+  delete pendingMessages[key];
   saveMessages(pendingMessages);
 });
 
