@@ -105,14 +105,12 @@ async function handle3MusketsCommand(bot) {
 
 // ===== MESSENGER STORAGE HELPERS =====
 function loadMessages() {
-  const pkg = JSON.parse(fs.readFileSync('./package.json'));
-  return pkg.messengerStore || [];
+  if (!fs.existsSync('./messenger.json')) return [];
+  return JSON.parse(fs.readFileSync('./messenger.json'));
 }
 
 function saveMessages(messages) {
-  const pkg = JSON.parse(fs.readFileSync('./package.json'));
-  pkg.messengerStore = messages;
-  fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2));
+  fs.writeFileSync('./messenger.json', JSON.stringify(messages, null, 2));
 }
 
 const openrouter = new OpenAI({
