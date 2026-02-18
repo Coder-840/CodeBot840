@@ -2,6 +2,7 @@ const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const pvp = require('mineflayer-pvp').plugin;
 const OpenAI = require('openai');
+const fs = require('fs'); // <-- added for offline messages
 
 const botArgs = {
   host: 'noBnoT.org',
@@ -102,6 +103,21 @@ async function handle3MusketsCommand(bot) {
   }
 }
 
+// ===== OFFLINE MESSAGE STORAGE =====
+const MESSAGE_FILE = './messages.json';
+let offlineMessages = {};
+if (fs.existsSync(MESSAGE_FILE)) {
+  try {
+    offlineMessages = JSON.parse(fs.readFileSync(MESSAGE_FILE));
+  } catch (err) {
+    console.error("Failed to load offline messages:", err);
+    offlineMessages = {};
+  }
+}
+function saveMessages() {
+  fs.writeFileSync(MESSAGE_FILE, JSON.stringify(offlineMessages, null, 2));
+}
+
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: "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"
@@ -119,36 +135,37 @@ function startBot() {
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
     // ===== WORKING HUNT LOOP =====
-setInterval(() => {
-  if (!hunting) return;
-  if (!bot.entity) return;
+    setInterval(() => {
+      if (!hunting) return;
+      if (!bot.entity) return;
 
-  const targets = Object.values(bot.entities)
-    .filter(e => (e.type === 'mob' || e.type === 'player'))
-    .filter(e => e.username !== bot.username)
-    .filter(e => e.type !== 'player' || !ignoreAllowed.has(e.username?.toLowerCase()));
+      const targets = Object.values(bot.entities)
+        .filter(e => (e.type === 'mob' || e.type === 'player'))
+        .filter(e => e.username !== bot.username)
+        .filter(e => e.type !== 'player' || !ignoreAllowed.has(e.username?.toLowerCase()));
 
-  if (!targets.length) return;
+      if (!targets.length) return;
 
-  targets.sort((a, b) =>
-    a.position.distanceTo(bot.entity.position) -
-    b.position.distanceTo(bot.entity.position)
-  );
+      targets.sort((a, b) =>
+        a.position.distanceTo(bot.entity.position) -
+        b.position.distanceTo(bot.entity.position)
+      );
 
-  const target = targets[0];
+      const target = targets[0];
 
-  // walk toward target
-  bot.pathfinder.setGoal(
-    new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
-    true
-  );
+      // walk toward target
+      bot.pathfinder.setGoal(
+        new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
+        true
+      );
 
-  // attack target
-  bot.pvp.attack(target);
+      // attack target
+      bot.pvp.attack(target);
 
-}, 1000);
+    }, 1000);
 
-}); // ← CLOSE SPAWN EVENT HERE
+  }); // ← CLOSE SPAWN EVENT HERE
+
   //Auto-Equip
   setInterval(() => {
     const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
@@ -176,7 +193,7 @@ setInterval(() => {
 
     // ===== COMMANDS =====
     if (command === '$help') {
-      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets');
+      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets, $message');
     }
 
     else if (command === '$repeat') {
@@ -187,6 +204,22 @@ setInterval(() => {
         bot.chat(repeatMsg);
         await new Promise(r => setTimeout(r, 2000));
       }
+    }
+
+    // ===== $message COMMAND =====
+    else if (command === '$message') {
+      const target = args[1];
+      const msg = args.slice(2).join(' ');
+      if (!target || !msg) return bot.chat('Usage: $message <player> <message>');
+
+      if (!offlineMessages[target.toLowerCase()]) offlineMessages[target.toLowerCase()] = [];
+      offlineMessages[target.toLowerCase()].push({
+        from: username,
+        message: msg,
+        timestamp: Date.now()
+      });
+      saveMessages();
+      bot.chat(`Message queued for ${target}.`);
     }
 
     // ===== SERVER-AWARE $ASK =====
@@ -237,23 +270,22 @@ setInterval(() => {
     }
 
     // ===== MOVEMENT / UTILITY =====
-      else if (command === '$goto') {
-  const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
-  if (isNaN(x)) return;
+    else if (command === '$goto') {
+      const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
+      if (isNaN(x)) return;
 
-  // enable block placing for pathfinder
-  const movements = new Movements(bot);
-  movements.allow1by1towers = true;      // allows towering up
-  movements.scafoldingBlocks = bot.inventory.items().map(i => i.type); // use any block in inventory
-  bot.pathfinder.setMovements(movements);
+      const movements = new Movements(bot);
+      movements.allow1by1towers = true;
+      movements.scafoldingBlocks = bot.inventory.items().map(i => i.type);
+      bot.pathfinder.setMovements(movements);
 
-  bot.pathfinder.setGoal(null);
-  bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z), true);
-}
+      bot.pathfinder.setGoal(null);
+      bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z), true);
+    }
 
-else if (command === '$3muskets') {
-  handle3MusketsCommand(bot);
-}
+    else if (command === '$3muskets') {
+      handle3MusketsCommand(bot);
+    }
 
     else if (command === '$coords') {
       const p = bot.entity.position;
@@ -279,7 +311,6 @@ else if (command === '$3muskets') {
       }
     }
 
-    // ===== HUNT COMMAND (ADDED) =====
     else if (command === '$hunt') {
       const arg = args[1]?.toLowerCase();
       if (arg === 'on') {
@@ -303,6 +334,19 @@ else if (command === '$3muskets') {
 
     if (message.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
     if (message.includes('/login')) bot.chat(`/login ${PASSWORD}`);
+
+    // ===== Detect player joins for offline messages =====
+    const joinMatch = message.match(/(.+) joined the game/);
+    if (joinMatch) {
+      const player = joinMatch[1].toLowerCase();
+      if (offlineMessages[player]?.length) {
+        offlineMessages[player].forEach(msgObj => {
+          bot.chat(`/msg ${player} ${msgObj.from} said "${msgObj.message}"`);
+        });
+        delete offlineMessages[player];
+        saveMessages();
+      }
+    }
   });
 
   bot.on('entityDeath', (entity) => {
