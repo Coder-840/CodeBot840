@@ -201,7 +201,7 @@ setInterval(() => {
 
     // ===== COMMANDS =====
     if (command === '$help') {
-      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets, $message, $hunt');
+      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets, $message [player] [message], $hunt');
     }
 
     else if (command === '$repeat') {
