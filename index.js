@@ -140,7 +140,7 @@ function startBot() {
       if (!hunting) return;
       if (!bot.entity) return;
 
-       = Object.values(bot.entities)
+const targets = Object.values(bot.entities)
   .filter(e =>
     e.type === 'mob' ||
     e.type === 'player' ||
