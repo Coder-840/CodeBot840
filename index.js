@@ -342,19 +342,21 @@ function startBot() {
   if (message.includes('/login')) bot.chat(`/login ${PASSWORD}`);
 
   // ===== Offline message delivery =====
-  const cleanMsg = message.replace(/§./g, ''); // remove color codes
-  const joinMatch = cleanMsg.match(/SERVER: (.+) joined\./);
-  if (joinMatch) {
-    const player = joinMatch[1].toLowerCase();
-    if (offlineMessages[player]?.length) {
-      offlineMessages[player].forEach(msgObj => {
-        bot.chat(`/msg ${player} ${msgObj.from} said "${msgObj.message}"`);
+
+    // ===== Periodic offline message delivery (distance-independent) =====
+setInterval(() => {
+  for (const playerName in offlineMessages) {
+    if (bot.players[playerName]) { // triggers if the player exists in bot.players
+      offlineMessages[playerName].forEach(msgObj => {
+        bot.chat(`/msg ${playerName} ${msgObj.from} said "${msgObj.message}"`);
       });
-      delete offlineMessages[player];
+      delete offlineMessages[playerName];
       saveMessages();
-      console.log(`Delivered offline messages to ${player}`);
+      console.log(`Delivered offline messages to ${playerName}`);
     }
   }
+}, 1000); // checks every 5 seconds
+    
 });
 
   bot.on('entityDeath', (entity) => {
