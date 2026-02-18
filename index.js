@@ -136,38 +136,45 @@ function startBot() {
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
     // ===== WORKING HUNT LOOP =====
-    setInterval(() => {
-      if (!hunting) return;
-      if (!bot.entity) return;
+setInterval(() => {
+  if (!hunting) return;
+  if (!bot.entity) return;
+  if (!bot.entity.position) return;
 
-      const targets = Object.values(bot.entities)
-        .filter(e => e && e !== bot.entity)
-        .filter(e => e.position && typeof e.position.x === "number")
-        .filter(e => !e.isDead)
-        .filter(e => {
-          if (!e.username) return true;
-          return !ignoreAllowed.has(e.username.toLowerCase());
-        });
+  const targets = Object.values(bot.entities)
+    .filter(e => e && e !== bot.entity)
+    .filter(e => e.position && typeof e.position.x === "number")
+    .filter(e => !e.isDead)
+    .filter(e => bot.entity.position.distanceTo(e.position) < 25) // anti-flag range limit
+    .filter(e => {
+      if (!e.username) return true;
+      return !ignoreAllowed.has(e.username.toLowerCase());
+    });
 
-      if (!targets.length) return;
+  if (!targets.length) return;
 
-      targets.sort((a, b) =>
-        a.position.distanceTo(bot.entity.position) -
-        b.position.distanceTo(bot.entity.position)
-      );
+  targets.sort((a, b) =>
+    a.position.distanceTo(bot.entity.position) -
+    b.position.distanceTo(bot.entity.position)
+  );
 
-      const target = targets[0];
+  const target = targets[0];
 
-      bot.pathfinder.setGoal(
-        new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
-        true
-      );
+  // Only path if far
+  if (bot.entity.position.distanceTo(target.position) > 3) {
+    bot.pathfinder.setGoal(
+      new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
+      true
+    );
+  }
 
-      bot.pvp.attack(target);
+  // Only attack if close
+  if (bot.entity.position.distanceTo(target.position) < 4) {
+    bot.pvp.attack(target);
+  }
 
-    }, 2000);
-  });
-
+}, 1500); // slower loop = less detection
+});
   // Auto-Equip
   setInterval(() => {
     const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
