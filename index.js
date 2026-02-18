@@ -345,6 +345,7 @@ function startBot() {
         });
         delete offlineMessages[player];
         saveMessages();
+        console.log("Saved messages:", JSON.stringify(offlineMessages, null, 2));
       }
     }
   });
