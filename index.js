@@ -289,7 +289,8 @@ setInterval(() => {
       const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
       if (isNaN(x)) return;
 
-      const movements = new Movements(bot);
+     const mcData = require('minecraft-data')(bot.version);
+      const movements = new Movements(bot, mcData);
       movements.allow1by1towers = true;
       movements.scafoldingBlocks = bot.inventory.items().map(i => i.type);
 
@@ -374,8 +375,23 @@ setInterval(() => {
     }
   });
 
-  bot.on('kicked', () => setTimeout(startBot, 10000));
-  bot.on('error', () => setTimeout(startBot, 10000));
+let reconnecting = false;
+
+function safeReconnect() {
+  if (reconnecting) return;
+  reconnecting = true;
+
+  console.log("Reconnecting in 10s...");
+  setTimeout(() => {
+    reconnecting = false;
+    startBot();
+  }, 10000);
+}
+
+bot.on('end', safeReconnect);
+bot.on('kicked', safeReconnect);
+bot.on('error', safeReconnect);
+
 }
 
 startBot();
