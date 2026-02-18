@@ -140,18 +140,14 @@ function startBot() {
       if (!hunting) return;
       if (!bot.entity) return;
 
-const targets = Object.values(bot.entities)
-  .filter(e =>
-    e.type === 'mob' ||
-    e.type === 'player' ||
-    e.name === 'Entity' // catches EntityID players
-  )
-  .filter(e => e !== bot.entity)
-  .filter(e => {
-    if (e.type !== 'player') return true;
-    if (!e.username) return true; // attack unnamed players
-    return !ignoreAllowed.has(e.username.toLowerCase());
-  });
+      const targets = Object.values(bot.entities)
+        .filter(e => e && e !== bot.entity)
+        .filter(e => e.position && typeof e.position.x === "number")
+        .filter(e => !e.isDead)
+        .filter(e => {
+          if (!e.username) return true;
+          return !ignoreAllowed.has(e.username.toLowerCase());
+        });
 
       if (!targets.length) return;
 
@@ -162,16 +158,15 @@ const targets = Object.values(bot.entities)
 
       const target = targets[0];
 
-      // walk toward target
       bot.pathfinder.setGoal(
         new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
         true
       );
 
-      // attack target
       bot.pvp.attack(target);
+
     }, 1000);
-  }); // ← CLOSE SPAWN EVENT HERE
+  });
 
   // Auto-Equip
   setInterval(() => {
