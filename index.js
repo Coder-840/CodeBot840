@@ -207,20 +207,25 @@ function startBot() {
     }
 
     // ===== $message COMMAND =====
-    else if (command === '$message') {
-      const target = args[1];
-      const msg = args.slice(2).join(' ');
-      if (!target || !msg) return bot.chat('Usage: $message <player> <message>');
 
-      if (!offlineMessages[target.toLowerCase()]) offlineMessages[target.toLowerCase()] = [];
-      offlineMessages[target.toLowerCase()].push({
-        from: username,
-        message: msg,
-        timestamp: Date.now()
-      });
-      saveMessages();
-      bot.chat(`Message queued for ${target}.`);
-    }
+      else if (command === '$message') {
+  const target = args[1];
+  const msg = args.slice(2).join(' ');
+  if (!target || !msg) return bot.chat('Usage: $message <player> <message>');
+
+  const lcTarget = target.toLowerCase();
+  if (!offlineMessages[lcTarget]) offlineMessages[lcTarget] = [];
+
+  offlineMessages[lcTarget].push({
+    from: username,
+    message: msg,
+    timestamp: Date.now()
+  });
+
+  saveMessages();
+  console.log("Saved messages:", JSON.stringify(offlineMessages, null, 2));
+  bot.chat(`Message queued for ${target}.`);
+}
 
     // ===== SERVER-AWARE $ASK =====
     else if (command === '$ask') {
@@ -327,28 +332,30 @@ function startBot() {
   });
 
   // ===== SERVER EVENTS =====
+
   bot.on('messagestr', (message) => {
-    console.log(`SERVER: ${message}`);
-    chatLogs.push(`SERVER: ${message}`);
-    if (chatLogs.length > 100) chatLogs.shift();
+  console.log(`SERVER MESSAGE: ${message}`);
+  chatLogs.push(`SERVER: ${message}`);
+  if (chatLogs.length > 100) chatLogs.shift();
 
-    if (message.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
-    if (message.includes('/login')) bot.chat(`/login ${PASSWORD}`);
+  if (message.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
+  if (message.includes('/login')) bot.chat(`/login ${PASSWORD}`);
 
-    // ===== Detect player joins for offline messages =====
-    const joinMatch = message.match(/(.+) joined the game/);
-    if (joinMatch) {
-      const player = joinMatch[1].toLowerCase();
-      if (offlineMessages[player]?.length) {
-        offlineMessages[player].forEach(msgObj => {
-          bot.chat(`/msg ${player} ${msgObj.from} said "${msgObj.message}"`);
-        });
-        delete offlineMessages[player];
-        saveMessages();
-        console.log("Saved messages:", JSON.stringify(offlineMessages, null, 2));
-      }
+  // ===== Offline message delivery =====
+  const cleanMsg = message.replace(/§./g, ''); // remove color codes
+  const joinMatch = cleanMsg.match(/SERVER: (.+) joined\./);
+  if (joinMatch) {
+    const player = joinMatch[1].toLowerCase();
+    if (offlineMessages[player]?.length) {
+      offlineMessages[player].forEach(msgObj => {
+        bot.chat(`/msg ${player} ${msgObj.from} said "${msgObj.message}"`);
+      });
+      delete offlineMessages[player];
+      saveMessages();
+      console.log(`Delivered offline messages to ${player}`);
     }
-  });
+  }
+});
 
   bot.on('entityDeath', (entity) => {
     if (entity.type === 'player') {
