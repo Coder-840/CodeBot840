@@ -2,6 +2,7 @@ const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const pvp = require('mineflayer-pvp').plugin;
 const OpenAI = require('openai');
+const fs = require('fs'); // ← Added for messenger persistence
 
 const botArgs = {
   host: 'noBnoT.org',
@@ -102,6 +103,18 @@ async function handle3MusketsCommand(bot) {
   }
 }
 
+// ===== MESSENGER STORAGE HELPERS =====
+function loadMessages() {
+  const pkg = JSON.parse(fs.readFileSync('./package.json'));
+  return pkg.messengerStore || [];
+}
+
+function saveMessages(messages) {
+  const pkg = JSON.parse(fs.readFileSync('./package.json'));
+  pkg.messengerStore = messages;
+  fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2));
+}
+
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: "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"
@@ -119,36 +132,37 @@ function startBot() {
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
     // ===== WORKING HUNT LOOP =====
-setInterval(() => {
-  if (!hunting) return;
-  if (!bot.entity) return;
+    setInterval(() => {
+      if (!hunting) return;
+      if (!bot.entity) return;
 
-  const targets = Object.values(bot.entities)
-    .filter(e => (e.type === 'mob' || e.type === 'player'))
-    .filter(e => e.username !== bot.username)
-    .filter(e => e.type !== 'player' || !ignoreAllowed.has(e.username?.toLowerCase()));
+      const targets = Object.values(bot.entities)
+        .filter(e => (e.type === 'mob' || e.type === 'player'))
+        .filter(e => e.username !== bot.username)
+        .filter(e => e.type !== 'player' || !ignoreAllowed.has(e.username?.toLowerCase()));
 
-  if (!targets.length) return;
+      if (!targets.length) return;
 
-  targets.sort((a, b) =>
-    a.position.distanceTo(bot.entity.position) -
-    b.position.distanceTo(bot.entity.position)
-  );
+      targets.sort((a, b) =>
+        a.position.distanceTo(bot.entity.position) -
+        b.position.distanceTo(bot.entity.position)
+      );
 
-  const target = targets[0];
+      const target = targets[0];
 
-  // walk toward target
-  bot.pathfinder.setGoal(
-    new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
-    true
-  );
+      // walk toward target
+      bot.pathfinder.setGoal(
+        new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
+        true
+      );
 
-  // attack target
-  bot.pvp.attack(target);
+      // attack target
+      bot.pvp.attack(target);
 
-}, 1000);
+    }, 1000);
 
-}); // ← CLOSE SPAWN EVENT HERE
+  }); // ← CLOSE SPAWN EVENT HERE
+
   //Auto-Equip
   setInterval(() => {
     const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
@@ -176,7 +190,7 @@ setInterval(() => {
 
     // ===== COMMANDS =====
     if (command === '$help') {
-      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets');
+      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets, $messenger');
     }
 
     else if (command === '$repeat') {
@@ -193,7 +207,6 @@ setInterval(() => {
     else if (command === '$ask') {
       const question = args.slice(1).join(' ');
       if (!question) return bot.chat("Ask me a question!");
-
       try {
         const context = chatLogs.slice(-50).join(' | ');
 
@@ -236,24 +249,45 @@ setInterval(() => {
       }
     }
 
+    // ===== MESSENGER COMMAND =====
+    else if (command === '$messenger') {
+      const target = args[1];
+      const msg = args.slice(2).join(' ');
+
+      if (!target || !msg)
+        return bot.chat('Usage: $messenger <player> <message>');
+
+      const messages = loadMessages();
+
+      messages.push({
+        to: target.toLowerCase(),
+        from: username,
+        message: msg
+      });
+
+      saveMessages(messages);
+
+      bot.chat(`Message saved for ${target}. I’ll deliver it when I see them.`);
+    }
+
     // ===== MOVEMENT / UTILITY =====
-      else if (command === '$goto') {
-  const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
-  if (isNaN(x)) return;
+    else if (command === '$goto') {
+      const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
+      if (isNaN(x)) return;
 
-  // enable block placing for pathfinder
-  const movements = new Movements(bot);
-  movements.allow1by1towers = true;      // allows towering up
-  movements.scafoldingBlocks = bot.inventory.items().map(i => i.type); // use any block in inventory
-  bot.pathfinder.setMovements(movements);
+      // enable block placing for pathfinder
+      const movements = new Movements(bot);
+      movements.allow1by1towers = true;
+      movements.scafoldingBlocks = bot.inventory.items().map(i => i.type);
+      bot.pathfinder.setMovements(movements);
 
-  bot.pathfinder.setGoal(null);
-  bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z), true);
-}
+      bot.pathfinder.setGoal(null);
+      bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z), true);
+    }
 
-else if (command === '$3muskets') {
-  handle3MusketsCommand(bot);
-}
+    else if (command === '$3muskets') {
+      handle3MusketsCommand(bot);
+    }
 
     else if (command === '$coords') {
       const p = bot.entity.position;
@@ -293,7 +327,25 @@ else if (command === '$3muskets') {
         bot.chat('Usage: $hunt on/off');
       }
     }
+
   });
+
+  // ===== MESSAGE DELIVERY SYSTEM =====
+  setInterval(() => {
+    const messages = loadMessages();
+
+    for (const name in bot.players) {
+      const deliver = messages.filter(m => m.to === name.toLowerCase());
+      if (!deliver.length) continue;
+
+      deliver.forEach(m => {
+        bot.chat(`/msg ${name} ${m.from} said "${m.message}"`);
+      });
+
+      const remaining = messages.filter(m => m.to !== name.toLowerCase());
+      saveMessages(remaining);
+    }
+  }, 10000);
 
   // ===== SERVER EVENTS =====
   bot.on('messagestr', (message) => {
