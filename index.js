@@ -176,28 +176,38 @@ setInterval(() => {
 }, 1500); // slower loop = less detection
 });
   // Auto-Equip
+
   setInterval(() => {
-    const armorTypes = ['helmet', 'chestplate', 'leggings', 'boots'];
-    armorTypes.forEach(type => {
-      const armor = bot.inventory.items().find(item => item.name.includes(type));
-      if (armor) bot.equip(armor, type).catch(() => {});
-    });
-    const sword = bot.inventory.items().find(item => item.name.includes('sword'));
-    if (sword) bot.equip(sword, 'hand').catch(() => {});
-  }, 5000);
+  const items = bot.inventory.items();
 
-  // ===== CHAT HANDLER =====
-  bot.on('chat', async (username, message) => {
-    if (username === bot.username) return;
+  const armorSlots = {
+    head: ["helmet"],
+    torso: ["chestplate", "elytra"],
+    legs: ["leggings"],
+    feet: ["boots"]
+  };
 
-    chatLogs.push(`${username}: ${message}`);
-    if (chatLogs.length > 100) chatLogs.shift();
-    console.log(`${username}: ${message}`);
+  for (const slot in armorSlots) {
+    const match = items.find(item =>
+      armorSlots[slot].some(name =>
+        item.name.toLowerCase().includes(name)
+      )
+    );
 
-    const args = message.split(' ');
-    const command = args[0].toLowerCase();
-    const canInteract = !ignoreMode || ignoreAllowed.has(username.toLowerCase());
-    if (!canInteract && command.startsWith('$')) return;
+    if (match) {
+      bot.equip(match, slot).catch(() => {});
+    }
+  }
+
+  // sword equip (prioritize best)
+  const sword = items
+    .filter(i => i.name.includes("sword"))
+    .sort((a,b)=> b.durabilityUsed - a.durabilityUsed)[0];
+
+  if (sword)
+    bot.equip(sword, "hand").catch(()=>{});
+
+}, 4000);
 
     // ===== COMMANDS =====
     if (command === '$help') {
