@@ -174,7 +174,7 @@ setInterval(() => {
   }
 
 }, 1500); // slower loop = less detection
-});
+    
   // Auto-Equip
 
   setInterval(() => {
