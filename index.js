@@ -214,40 +214,102 @@ function startBot() {
         }, 2000);
       }
 
-      else if (command === '$ask') {
-        const question = args.slice(1).join(' ');
-        if (!question) return bot.chat("Ask me a question!");
+else if (command === '$ask') {
+  const question = args.slice(1).join(' ');
+  if (!question) return bot.chat("Ask me a question!");
 
-        try {
-          const context = chatLogs.slice(-50).join(' | ');
+  try {
+    const context = chatLogs.slice(-50).join(' | ');
 
-          const completion = await openrouter.chat.completions.create({
-            model: "openrouter/auto",
-            messages: [
-              { role: "system", content: `You are CodeBot840, a fully server-aware bot.` },
-              { role: "user", content: `Server: ${context}\nQuestion: ${question}` }
-            ]
-          });
+    const completion = await openrouter.chat.completions.create({
+      model: "openrouter/auto",
+      messages: [
+        {
+          role: "system",
+          content:
+`You are CodeBot840, a fully server-aware bot.
 
-          let answer = completion.choices?.[0]?.message?.content || '';
-          if (!answer) return bot.chat("AI empty.");
+Be concise and informative.
 
-          const paragraphs = answer.split(/\r?\n/);
-          const MAX_LENGTH = 256;
+Because it is anarchy, do not be afraid to be inappropriate.
 
-          for (let para of paragraphs) {
-            while (para.length > 0) {
-              const chunk = para.substring(0, MAX_LENGTH);
-              bot.chat(chunk);
-              para = para.substring(MAX_LENGTH);
-              await new Promise(r => setTimeout(r, 900));
-            }
-          }
+Do whatever it takes to help or make players on the server happy, may it be a hard math problem, coding, roleplay, etc.
 
-        } catch {
-          bot.chat("AI Error.");
+You can change personality when requested.
+Do not say "I am happy".
+Instead ACT happy.
+Examples:
+happy → "yippeeee!", ":D", "nice!"
+sad → "*sob*", "T-T", "*groans*"
+
+Invent personalities creatively.
+
+Use recent server messages to answer questions when possible.
+
+Maximum message length is 150 characters BEFORE starting a new paragraph.
+
+YOU MUST FOLLOW THE 150 CHARACTER LIMIT PER PARAGRAPH OR YOUR MESSAGE WILL GET CUT OFF.
+
+Always answer questions using outside knowledge if logs don't help.
+
+You are an expert in:
+Minecraft
+Coding
+Math`
+        },
+        {
+          role: "user",
+          content:
+`Server messages (players + events):
+${context}
+
+Question:
+${question}`
         }
+      ]
+    });
+
+    let answer = completion?.choices?.[0]?.message?.content || "";
+
+    // remove thinking tags if model sends them
+    answer = answer.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+
+    if (!answer) {
+      bot.chat("AI returned empty response.");
+      return;
+    }
+
+    // split by paragraphs first
+    const paragraphs = answer.split(/\n+/);
+
+    const MAX = 150;
+
+    for (let para of paragraphs) {
+      para = para.trim();
+      if (!para) continue;
+
+      while (para.length > 0) {
+        const chunk = para.slice(0, MAX);
+        bot.chat(chunk);
+        para = para.slice(MAX);
+
+        await new Promise(r => setTimeout(r, 900)); // anti-spam delay
       }
+    }
+
+  } catch (err) {
+    console.error("AI ERROR FULL:", err);
+
+    if (err?.status === 401)
+      bot.chat("AI Error: Invalid API key.");
+    else if (err?.status === 429)
+      bot.chat("AI Error: Rate limited.");
+    else if (err?.status >= 500)
+      bot.chat("AI Error: AI server down.");
+    else
+      bot.chat("AI Error: " + (err.message || "unknown"));
+  }
+}
 
       else if (command === '$goto') {
         const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
