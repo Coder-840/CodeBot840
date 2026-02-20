@@ -15,7 +15,7 @@ const PASSWORD = 'YourSecurePassword123';
 let chatLogs = [];
 let ignoreMode = true;
 const ignoreAllowed = new Set(['player_840', 'chickentender']);
-let hunting = false; // ===== ADDED HUNT MODE FLAG =====
+let hunting = false;
 
 // ===== 3 MUSKETEERS SYSTEM =====
 let musketsActive = false;
@@ -111,7 +111,7 @@ function saveMessages() {
 
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
-  apiKey: "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"
+  apiKey: "sk-or-v1-REPLACE_THIS_KEY"
 });
 
 function startBot() {
@@ -125,13 +125,194 @@ function startBot() {
     bot.pvp.movements.canDig = true;
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
-    // =========================
-    // ✅ ADDED CHAT LISTENER
-    // =========================
+    // ===== HUNT LOOP =====
+    setInterval(() => {
+      if (!hunting) return;
+      if (!bot.entity || !bot.entity.position) return;
+
+      const targets = Object.values(bot.entities)
+        .filter(e => e && e !== bot.entity)
+        .filter(e => e.position && typeof e.position.x === "number")
+        .filter(e => !e.isDead)
+        .filter(e => bot.entity.position.distanceTo(e.position) < 25)
+        .filter(e => {
+          if (!e.username) return true;
+          return !ignoreAllowed.has(e.username.toLowerCase());
+        });
+
+      if (!targets.length) return;
+
+      targets.sort((a, b) =>
+        a.position.distanceTo(bot.entity.position) -
+        b.position.distanceTo(bot.entity.position)
+      );
+
+      const target = targets[0];
+
+      if (bot.entity.position.distanceTo(target.position) > 3) {
+        bot.pathfinder.setGoal(
+          new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
+          true
+        );
+      }
+
+      if (bot.entity.position.distanceTo(target.position) < 4) {
+        bot.pvp.attack(target);
+      }
+
+    }, 1500);
+
+    // ===== AUTO EQUIP =====
+    setInterval(() => {
+      const items = bot.inventory.items();
+
+      const armorSlots = {
+        head: ["helmet"],
+        torso: ["chestplate", "elytra"],
+        legs: ["leggings"],
+        feet: ["boots"]
+      };
+
+      for (const slot in armorSlots) {
+        const match = items.find(item =>
+          armorSlots[slot].some(name =>
+            item.name.toLowerCase().includes(name)
+          )
+        );
+        if (match) bot.equip(match, slot).catch(()=>{});
+      }
+
+      const sword = items
+        .filter(i => i.name.includes("sword"))
+        .sort((a,b)=> b.durabilityUsed - a.durabilityUsed)[0];
+
+      if (sword) bot.equip(sword, "hand").catch(()=>{});
+
+    }, 4000);
+
+    // ================= CHAT COMMAND LISTENER =================
     bot.on('chat', async (username, message) => {
       if (username === bot.username) return;
 
       const args = message.trim().split(/\s+/);
       const command = args[0].toLowerCase();
 
-    // ===== COMMANDS =====
+      if (command === '$help') {
+        bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets, $message [player] [message], $hunt');
+      }
+
+      else if (command === '$repeat') {
+        const count = parseInt(args[args.length - 1]);
+        const repeatMsg = args.slice(1, -1).join(' ');
+        if (isNaN(count)) return;
+
+        let i = 0;
+        const interval = setInterval(() => {
+          if (i >= count) return clearInterval(interval);
+          bot.chat(repeatMsg);
+          i++;
+        }, 2000);
+      }
+
+      else if (command === '$ask') {
+        const question = args.slice(1).join(' ');
+        if (!question) return bot.chat("Ask me a question!");
+
+        try {
+          const context = chatLogs.slice(-50).join(' | ');
+
+          const completion = await openrouter.chat.completions.create({
+            model: "openrouter/auto",
+            messages: [
+              { role: "system", content: `You are CodeBot840, a fully server-aware bot.` },
+              { role: "user", content: `Server: ${context}\nQuestion: ${question}` }
+            ]
+          });
+
+          let answer = completion.choices?.[0]?.message?.content || '';
+          if (!answer) return bot.chat("AI empty.");
+
+          const paragraphs = answer.split(/\r?\n/);
+          const MAX_LENGTH = 256;
+
+          for (let para of paragraphs) {
+            while (para.length > 0) {
+              const chunk = para.substring(0, MAX_LENGTH);
+              bot.chat(chunk);
+              para = para.substring(MAX_LENGTH);
+              await new Promise(r => setTimeout(r, 900));
+            }
+          }
+
+        } catch {
+          bot.chat("AI Error.");
+        }
+      }
+
+      else if (command === '$goto') {
+        const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
+        if (isNaN(x)) return;
+
+        const mcData = require('minecraft-data')(bot.version);
+        const movements = new Movements(bot, mcData);
+        movements.allow1by1towers = true;
+        movements.scafoldingBlocks = bot.inventory.items().map(i => i.type);
+
+        bot.pathfinder.setMovements(movements);
+        bot.pathfinder.setGoal(null);
+        bot.pathfinder.setGoal(new goals.GoalBlock(x,y,z), true);
+      }
+
+      else if (command === '$3muskets') {
+        handle3MusketsCommand(bot);
+      }
+
+      else if (command === '$coords') {
+        const p = bot.entity.position;
+        bot.chat(`I am at X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
+      }
+
+      else if (command === '$kill') {
+        bot.chat('/kill');
+      }
+
+      else if (command === '$hunt') {
+        const arg = args[1]?.toLowerCase();
+        if (arg === 'on') {
+          hunting = true;
+          bot.chat('Hunting enabled.');
+        } else if (arg === 'off') {
+          hunting = false;
+          bot.pvp.stop();
+          bot.chat('Hunting disabled.');
+        }
+      }
+    });
+  });
+
+  // ===== SERVER EVENTS =====
+  bot.on('messagestr', (message) => {
+    console.log(`SERVER: ${message}`);
+    chatLogs.push(`SERVER: ${message}`);
+    if (chatLogs.length > 100) chatLogs.shift();
+
+    if (message.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
+    if (message.includes('/login')) bot.chat(`/login ${PASSWORD}`);
+  });
+
+  let reconnecting = false;
+  function safeReconnect() {
+    if (reconnecting) return;
+    reconnecting = true;
+    setTimeout(() => {
+      reconnecting = false;
+      startBot();
+    }, 10000);
+  }
+
+  bot.on('end', safeReconnect);
+  bot.on('kicked', safeReconnect);
+  bot.on('error', safeReconnect);
+}
+
+startBot();
