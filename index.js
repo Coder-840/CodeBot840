@@ -111,7 +111,7 @@ function saveMessages() {
 
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
-  apiKey: "sk-or-v1-REPLACE_THIS_KEY"
+  apiKey: "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"
 });
 
 function startBot() {
