@@ -338,6 +338,27 @@ ${question}`
         bot.chat('/kill');
       }
 
+      else if (command === '$message') {
+  const target = args[1]?.toLowerCase();
+  const msg = args.slice(2).join(' ');
+
+  if (!target || !msg) {
+    bot.chat("Usage: $message <player> <message>");
+    return;
+  }
+
+  if (!offlineMessages[target]) offlineMessages[target] = [];
+
+  offlineMessages[target].push({
+    sender: username,
+    text: msg
+  });
+
+  saveMessages();
+
+  bot.chat(`Message saved for ${target}. They will get it when they join.`);
+}
+
       else if (command === '$hunt') {
         const arg = args[1]?.toLowerCase();
         if (arg === 'on') {
