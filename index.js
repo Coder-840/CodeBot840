@@ -214,15 +214,21 @@ setInterval(() => {
       bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets, $message [player] [message], $hunt');
     }
 
-    else if (command === '$repeat') {
-      const count = parseInt(args[args.length - 1]);
-      const repeatMsg = args.slice(1, -1).join(' ');
-      if (isNaN(count)) return;
-      for (let i = 0; i < count; i++) {
-        bot.chat(repeatMsg);
-        await new Promise(r => setTimeout(r, 2000));
-      }
+      else if (command === '$repeat') {
+  const count = parseInt(args[args.length - 1]);
+  const repeatMsg = args.slice(1, -1).join(' ');
+  if (isNaN(count)) return;
+
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i >= count) {
+      clearInterval(interval);
+      return;
     }
+    bot.chat(repeatMsg);
+    i++;
+  }, 2000);
+}
 
     // ===== SERVER-AWARE $ASK =====
     else if (command === '$ask') {
