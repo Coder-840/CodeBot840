@@ -33,7 +33,7 @@ const gibberishChars = [
 
 function randomGibberish() {
   let msg = "";
-  const len = Math.floor(Math.random() * 6) + 3; // 3-8 characters
+  const len = Math.floor(Math.random() * 6) + 3;
   for (let i = 0; i < len; i++) {
     msg += gibberishChars[Math.floor(Math.random() * gibberishChars.length)];
   }
@@ -53,7 +53,6 @@ function createMusket(username) {
 
     musketBots.push(b);
 
-    // ===== RANDOM CHAT =====
     b.once('spawn', () => {
       const interval = setInterval(() => {
         if (!musketsActive) {
@@ -64,29 +63,23 @@ function createMusket(username) {
       }, Math.random() * 4000 + 2000);
     });
 
-    // ===== AUTO REGISTER / LOGIN =====
     b.on('messagestr', message => {
       if (message.includes('/register')) b.chat(`/register ${PASSWORD} ${PASSWORD}`);
       if (message.includes('/login')) b.chat(`/login ${PASSWORD}`);
     });
 
-    // ===== AUTO RECONNECT ONLY IF KICKED =====
     b.on('kicked', reason => {
       console.log(username + " kicked:", reason);
       if (musketsActive) setTimeout(spawnBot, 8000);
     });
 
-    // Normal disconnect does NOT reconnect
     b.on('end', () => console.log(username + " disconnected normally."));
-
-    // Prevent crashes from minor errors
     b.on('error', err => console.log(username + " error:", err.message));
   }
 
   spawnBot();
 }
 
-// ===== COMMAND TO TOGGLE MUSKETEERS =====
 async function handle3MusketsCommand(bot) {
   if (!musketsActive) {
     musketsActive = true;
@@ -102,14 +95,12 @@ async function handle3MusketsCommand(bot) {
   }
 }
 
-// ===== OFFLINE MESSAGES SYSTEM =====
 const MESSAGE_FILE = './offlineMessages.json';
 let offlineMessages = {};
 if (fs.existsSync(MESSAGE_FILE)) {
   try {
     offlineMessages = JSON.parse(fs.readFileSync(MESSAGE_FILE));
-  } catch (err) {
-    console.error('Failed to load offline messages:', err);
+  } catch {
     offlineMessages = {};
   }
 }
@@ -118,7 +109,6 @@ function saveMessages() {
   fs.writeFileSync(MESSAGE_FILE, JSON.stringify(offlineMessages, null, 2));
 }
 
-// ===== OPENAI API =====
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: "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"
@@ -135,279 +125,13 @@ function startBot() {
     bot.pvp.movements.canDig = true;
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
-    // ===== WORKING HUNT LOOP =====
-setInterval(() => {
-  if (!hunting) return;
-  if (!bot.entity) return;
-  if (!bot.entity.position) return;
+    // =========================
+    // ✅ ADDED CHAT LISTENER
+    // =========================
+    bot.on('chat', async (username, message) => {
+      if (username === bot.username) return;
 
-  const targets = Object.values(bot.entities)
-    .filter(e => e && e !== bot.entity)
-    .filter(e => e.position && typeof e.position.x === "number")
-    .filter(e => !e.isDead)
-    .filter(e => bot.entity.position.distanceTo(e.position) < 25) // anti-flag range limit
-    .filter(e => {
-      if (!e.username) return true;
-      return !ignoreAllowed.has(e.username.toLowerCase());
-    });
-
-  if (!targets.length) return;
-
-  targets.sort((a, b) =>
-    a.position.distanceTo(bot.entity.position) -
-    b.position.distanceTo(bot.entity.position)
-  );
-
-  const target = targets[0];
-
-  // Only path if far
-  if (bot.entity.position.distanceTo(target.position) > 3) {
-    bot.pathfinder.setGoal(
-      new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
-      true
-    );
-  }
-
-  // Only attack if close
-  if (bot.entity.position.distanceTo(target.position) < 4) {
-    bot.pvp.attack(target);
-  }
-
-}, 1500); // slower loop = less detection
-    
-  // Auto-Equip
-
-  setInterval(() => {
-  const items = bot.inventory.items();
-
-  const armorSlots = {
-    head: ["helmet"],
-    torso: ["chestplate", "elytra"],
-    legs: ["leggings"],
-    feet: ["boots"]
-  };
-
-  for (const slot in armorSlots) {
-    const match = items.find(item =>
-      armorSlots[slot].some(name =>
-        item.name.toLowerCase().includes(name)
-      )
-    );
-
-    if (match) {
-      bot.equip(match, slot).catch(() => {});
-    }
-  }
-
-  // sword equip (prioritize best)
-  const sword = items
-    .filter(i => i.name.includes("sword"))
-    .sort((a,b)=> b.durabilityUsed - a.durabilityUsed)[0];
-
-  if (sword)
-    bot.equip(sword, "hand").catch(()=>{});
-
-}, 4000);
+      const args = message.trim().split(/\s+/);
+      const command = args[0].toLowerCase();
 
     // ===== COMMANDS =====
-    if (command === '$help') {
-      bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets, $message [player] [message], $hunt');
-    }
-
-      else if (command === '$repeat') {
-  const count = parseInt(args[args.length - 1]);
-  const repeatMsg = args.slice(1, -1).join(' ');
-  if (isNaN(count)) return;
-
-  let i = 0;
-  const interval = setInterval(() => {
-    if (i >= count) {
-      clearInterval(interval);
-      return;
-    }
-    bot.chat(repeatMsg);
-    i++;
-  }, 2000);
-}
-
-    // ===== SERVER-AWARE $ASK =====
-    else if (command === '$ask') {
-      const question = args.slice(1).join(' ');
-      if (!question) return bot.chat("Ask me a question!");
-
-      try {
-        const context = chatLogs.slice(-50).join(' | ');
-
-        const completion = await openrouter.chat.completions.create({
-          model: "openrouter/auto",
-          messages: [
-            {
-              role: "system",
-              content: `You are CodeBot840, a fully server-aware bot. Be concise and informative. Because it is anarchy, do not be afraid to be inappropriate. Do whatever it takes to help or make players on the server happy, may it be a hard math problem, some coding, or roleplay, etc... You can change personality when requested. Remember to sound like it, to act like it, not just say something like "I'm happy". For example, if someone tells you to have a happy personality, you cann add an occasional "yippeeee", or "nice!" or even just a ":D". And if someone tells you to have a sad personality, you can add things like "*groans*", or "*sob*" or "T-T". But obviously, those are not the only two personalities, make your own! Reacti in your own ways! Use last server messages (chat, deaths, joins) to answer a users question if possible. Maximum message length is 150 characters before you make a new paragraph. YOU MUST FOLLOW THE 150 CHARACTER LIMIT PER PARAGRAPH OR YOUR MESSAGE WILL GET CUT OFF. Always answer player questions using outside knowledge if logs don't provide enough info. You are an expert in Minecraft, coding, and math.`
-            },
-            {
-              role: "user",
-              content: `Server messages (players + server events): ${context}\nQuestion: ${question}`
-            }
-          ]
-        });
-
-        let answer = completion.choices?.[0]?.message?.content || '';
-        answer = answer.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-        if (!answer) return bot.chat("AI returned an empty response.");
-
-        const paragraphs = answer.split(/\r?\n/);
-        const MAX_LENGTH = 256;
-
-        for (let para of paragraphs) {
-          para = para.trim();
-          if (!para) continue;
-
-          while (para.length > 0) {
-            const chunk = para.substring(0, MAX_LENGTH);
-            bot.chat(chunk);
-            para = para.substring(MAX_LENGTH);
-            await new Promise(r => setTimeout(r, 900));
-          }
-        }
-
-      } catch (err) {
-        console.error("AI Error:", err.message);
-        bot.chat("AI Error: Connection failed.");
-      }
-    }
-
-    // ===== OFFLINE MESSAGE COMMAND =====
-    else if (command === '$message') {
-      const target = args[1];
-      const msg = args.slice(2).join(' ');
-
-      if (!target || !msg) {
-        bot.chat('Usage: $message <target> <message>');
-        return;
-      }
-
-      const key = target.toLowerCase();
-      if (!offlineMessages[key]) offlineMessages[key] = [];
-
-      offlineMessages[key].push({
-        sender: username,
-        message: msg,
-        timestamp: Date.now()
-      });
-
-      saveMessages();
-      bot.chat(`Message saved for ${target}. They will get it when they join.`);
-    }
-
-    // ===== MOVEMENT / UTILITY =====
-    else if (command === '$goto') {
-      const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
-      if (isNaN(x)) return;
-
-     const mcData = require('minecraft-data')(bot.version);
-      const movements = new Movements(bot, mcData);
-      movements.allow1by1towers = true;
-      movements.scafoldingBlocks = bot.inventory.items().map(i => i.type);
-
-      bot.pathfinder.setMovements(movements);
-      bot.pathfinder.setGoal(null);
-      bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z), true);
-    }
-
-    else if (command === '$3muskets') {
-      handle3MusketsCommand(bot);
-    }
-
-    else if (command === '$coords') {
-      const p = bot.entity.position;
-      bot.chat(`I am at X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
-    }
-
-    else if (command === '$kill') {
-      bot.chat('/kill');
-    }
-
-    else if (command === '$ignore') {
-      if (!ignoreAllowed.has(username.toLowerCase())) return;
-
-      const state = args[1]?.toLowerCase();
-      if (state === 'true') {
-        ignoreMode = true;
-        bot.chat('Ignore mode enabled.');
-      } else if (state === 'false') {
-        ignoreMode = false;
-        bot.chat('Ignore mode disabled.');
-      } else {
-        bot.chat('Usage: $ignore true/false');
-      }
-    }
-
-    // ===== HUNT COMMAND (ADDED) =====
-    else if (command === '$hunt') {
-      const arg = args[1]?.toLowerCase();
-      if (arg === 'on') {
-        hunting = true;
-        bot.chat('Hunting mode enabled.');
-      } else if (arg === 'off') {
-        hunting = false;
-        bot.pvp.stop();
-        bot.chat('Hunting mode disabled.');
-      } else {
-        bot.chat('Usage: $hunt on/off');
-      }
-    }
-  });
-
-  // ===== SERVER EVENTS =====
-  bot.on('messagestr', (message) => {
-    console.log(`SERVER: ${message}`);
-    chatLogs.push(`SERVER: ${message}`);
-    if (chatLogs.length > 100) chatLogs.shift();
-
-    if (message.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
-    if (message.includes('/login')) bot.chat(`/login ${PASSWORD}`);
-
-    // Detect joins for offline messages
-    const joinMatch = message.match(/([A-Za-z0-9_]+) joined/);
-    if (joinMatch) {
-      const key = joinMatch[1].toLowerCase();
-      if (offlineMessages[key]?.length) {
-        offlineMessages[key].forEach(msgObj => {
-          bot.chat(`/msg ${key} ${msgObj.sender} said "${msgObj.message}"`);
-        });
-        delete offlineMessages[key];
-        saveMessages();
-      }
-    }
-  });
-
-  bot.on('entityDeath', (entity) => {
-    if (entity.type === 'player') {
-      const deathMsg = `SERVER: ${entity.username} died`;
-      console.log(deathMsg);
-      chatLogs.push(deathMsg);
-      if (chatLogs.length > 100) chatLogs.shift();
-    }
-  });
-
-let reconnecting = false;
-
-function safeReconnect() {
-  if (reconnecting) return;
-  reconnecting = true;
-
-  console.log("Reconnecting in 10s...");
-  setTimeout(() => {
-    reconnecting = false;
-    startBot();
-  }, 10000);
-}
-
-bot.on('end', safeReconnect);
-bot.on('kicked', safeReconnect);
-bot.on('error', safeReconnect);
-
-}
-
-startBot();
