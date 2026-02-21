@@ -197,6 +197,9 @@ function startBot() {
       const args = message.trim().split(/\s+/);
       const command = args[0].toLowerCase();
 
+  const canInteract = !ignoreMode || ignoreAllowed.has(username.toLowerCase());
+  if (!canInteract && command.startsWith('$')) return;
+
       if (command === '$help') {
         bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets, $message [player] [message], $hunt');
       }
