@@ -246,9 +246,9 @@ Invent personalities creatively.
 
 Use recent server messages to answer questions when possible.
 
-Maximum message length is 150 characters BEFORE starting a new paragraph.
+Maximum message length is 240 characters BEFORE starting a new paragraph.
 
-YOU MUST FOLLOW THE 150 CHARACTER LIMIT PER PARAGRAPH OR YOUR MESSAGE WILL GET CUT OFF.
+YOU MUST FOLLOW THE 240 CHARACTER LIMIT PER PARAGRAPH OR YOUR MESSAGE WILL GET CUT OFF.
 
 Always answer questions using outside knowledge if logs don't help.
 
@@ -282,7 +282,7 @@ ${question}`
     // split by paragraphs first
     const paragraphs = answer.split(/\n+/);
 
-    const MAX = 150;
+    const MAX = 240;
 
     for (let para of paragraphs) {
       para = para.trim();
@@ -293,7 +293,7 @@ ${question}`
         bot.chat(chunk);
         para = para.slice(MAX);
 
-        await new Promise(r => setTimeout(r, 900)); // anti-spam delay
+        await new Promise(r => setTimeout(r, 1000)); // anti-spam delay
       }
     }
 
@@ -337,26 +337,27 @@ ${question}`
       else if (command === '$kill') {
         bot.chat('/kill');
       }
-
+      
       else if (command === '$message') {
-  const target = args[1]?.toLowerCase();
+  const rawTarget = args[1];
+  const targetKey = rawTarget?.toLowerCase();
   const msg = args.slice(2).join(' ');
 
-  if (!target || !msg) {
+  if (!rawTarget || !msg) {
     bot.chat("Usage: $message <player> <message>");
     return;
   }
 
-  if (!offlineMessages[target]) offlineMessages[target] = [];
+  if (!offlineMessages[targetKey]) offlineMessages[targetKey] = [];
 
-  offlineMessages[target].push({
+  offlineMessages[targetKey].push({
     sender: username,
-    text: msg
+    text: msg,
+    originalName: rawTarget
   });
 
   saveMessages();
-
-  bot.chat(`Message saved for ${target}. They will get it when they join.`);
+  bot.chat(`Message saved for ${rawTarget}.`);
 }
 
       else if (command === '$hunt') {
@@ -375,13 +376,30 @@ ${question}`
 
   // ===== SERVER EVENTS =====
   bot.on('messagestr', (message) => {
-    console.log(`SERVER: ${message}`);
-    chatLogs.push(`SERVER: ${message}`);
-    if (chatLogs.length > 100) chatLogs.shift();
+  console.log(`SERVER: ${message}`);
+  chatLogs.push(`SERVER: ${message}`);
+  if (chatLogs.length > 100) chatLogs.shift();
 
-    if (message.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
-    if (message.includes('/login')) bot.chat(`/login ${PASSWORD}`);
-  });
+  // auto auth
+  if (message.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
+  if (message.includes('/login')) bot.chat(`/login ${PASSWORD}`);
+
+  // ===== OFFLINE MESSAGE DELIVERY =====
+  const joinMatch = message.match(/(\w+) joined/i);
+  if (joinMatch) {
+    const joinedName = joinMatch[1];
+    const key = joinedName.toLowerCase();
+
+    if (offlineMessages[key]) {
+      offlineMessages[key].forEach(m => {
+        bot.chat(`/msg ${joinedName} ${m.sender} said "${m.text}"`);
+      });
+
+      delete offlineMessages[key];
+      saveMessages();
+    }
+  }
+});
 
   let reconnecting = false;
   function safeReconnect() {
