@@ -95,6 +95,7 @@ async function handle3MusketsCommand(bot) {
   }
 }
 
+// ===== OFFLINE MESSAGE SYSTEM =====
 const MESSAGE_FILE = './offlineMessages.json';
 let offlineMessages = {};
 if (fs.existsSync(MESSAGE_FILE)) {
@@ -110,7 +111,7 @@ function saveMessages() {
 }
 
 // ===== FOLLOW-UP SYSTEM =====
-const followUps = {};
+const followUps = {}; // key: lowercase username, value: topic
 
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -212,7 +213,67 @@ function startBot() {
             messages: [
               {
                 role: "system",
-                content: `You are CodeBot840, a fully server-aware bot.
+                content: `You are CodeBot840. Respond briefly and naturally. Behavior instruction: ${follow}`
+              },
+              {
+                role: "user",
+                content: message
+              }
+            ]
+          });
+
+          const reply = completion.choices?.[0]?.message?.content?.slice(0, 256);
+          if (reply) bot.chat(reply);
+
+        } catch {}
+      }
+
+      // ===== COMMANDS =====
+      if (command === '$help') {
+        bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets, $message [player] [message], $hunt, $followup [player] [topic]');
+      }
+
+      else if (command === '$followup') {
+        if (!ignoreAllowed.has(username.toLowerCase()))
+          return bot.chat("No permission.");
+
+        const target = args[1];
+        const topic = args.slice(2).join(' ');
+
+        if (!target || !topic)
+          return bot.chat("Usage: $followup <player> <topic>");
+
+        followUps[target.toLowerCase()] = topic;
+        bot.chat(`Follow-up set for ${target}.`);
+      }
+
+      else if (command === '$repeat') {
+        const count = parseInt(args[args.length - 1]);
+        const repeatMsg = args.slice(1, -1).join(' ');
+        if (isNaN(count)) return;
+
+        let i = 0;
+        const interval = setInterval(() => {
+          if (i >= count) return clearInterval(interval);
+          bot.chat(repeatMsg);
+          i++;
+        }, 2000);
+      }
+
+      else if (command === '$ask') {
+        const question = args.slice(1).join(' ');
+        if (!question) return bot.chat("Ask me a question!");
+
+        try {
+          const context = chatLogs.slice(-50).join(' | ');
+
+          const completion = await openrouter.chat.completions.create({
+            model: "openrouter/auto",
+            messages: [
+              {
+                role: "system",
+                content:
+`You are CodeBot840, a fully server-aware bot.
 
 Be concise and informative.
 
@@ -240,41 +301,133 @@ Always answer questions using outside knowledge if logs don't help.
 You are an expert in:
 Minecraft
 Coding
-Math``
+Math`
               },
               {
                 role: "user",
-                content: message
+                content: `Server messages (players + events):
+${context}
+
+Question:
+${question}`
               }
             ]
           });
 
-          const reply = completion.choices?.[0]?.message?.content?.slice(0, 256);
-          if (reply) bot.chat(reply);
+          let answer = completion?.choices?.[0]?.message?.content || "";
 
-        } catch {}
+          // remove thinking tags if model sends them
+          answer = answer.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+
+          if (!answer) {
+            bot.chat("AI returned empty response.");
+            return;
+          }
+
+          // split by paragraphs first
+          const paragraphs = answer.split(/\n+/);
+
+          const MAX = 240;
+
+          for (let para of paragraphs) {
+            while (para.length > 0) {
+              const chunk = para.slice(0, MAX);
+              bot.chat(chunk);
+              para = para.slice(MAX);
+
+              await new Promise(r => setTimeout(r, 1000)); // anti-spam delay
+            }
+          }
+
+        } catch (err) {
+          console.error("AI ERROR FULL:", err);
+
+          if (err?.status === 401)
+            bot.chat("AI Error: Invalid API key.");
+          else if (err?.status === 429)
+            bot.chat("AI Error: Rate limited.");
+          else if (err?.status >= 500)
+            bot.chat("AI Error: AI server down.");
+          else
+            bot.chat("AI Error: " + (err.message || "unknown"));
+        }
       }
 
-      if (command === '$help') {
-        bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets, $message [player] [message], $hunt, $followup [player] [topic]');
+      else if (command === '$goto') {
+        const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
+        if (isNaN(x)) return;
+
+        const mcData = require('minecraft-data')(bot.version);
+        const movements = new Movements(bot, mcData);
+        movements.allow1by1towers = true;
+        movements.scafoldingBlocks = bot.inventory.items().map(i => i.type);
+
+        bot.pathfinder.setMovements(movements);
+        bot.pathfinder.setGoal(null);
+        bot.pathfinder.setGoal(new goals.GoalBlock(x,y,z), true);
       }
 
-      else if (command === '$followup') {
-        if (!ignoreAllowed.has(username.toLowerCase()))
-          return bot.chat("No permission.");
-
-        const target = args[1];
-        const topic = args.slice(2).join(' ');
-
-        if (!target || !topic)
-          return bot.chat("Usage: $followup <player> <topic>");
-
-        followUps[target.toLowerCase()] = topic;
-        bot.chat(`Follow-up set for ${target}.`);
+      else if (command === '$3muskets') {
+        handle3MusketsCommand(bot);
       }
 
-      // … [Insert the rest of your $repeat, $ask, $goto, $3muskets, $coords, $kill, $message, $hunt code exactly as-is here] …
-      // (You already had them correctly implemented)
+      else if (command === '$coords') {
+        const p = bot.entity.position;
+        bot.chat(`I am at X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`);
+      }
+
+      else if (command === '$kill') {
+        bot.chat('/kill');
+      }
+
+      else if (command === '$message') {
+        const rawTarget = args[1];
+        const targetKey = rawTarget?.toLowerCase();
+        const msg = args.slice(2).join(' ');
+
+        if (!rawTarget || !msg) {
+          bot.chat("Usage: $message <player> <message>");
+          return;
+        }
+
+        if (!offlineMessages[targetKey]) offlineMessages[targetKey] = [];
+
+        offlineMessages[targetKey].push({
+          sender: username,
+          text: msg,
+          originalName: rawTarget
+        });
+
+        saveMessages();
+        bot.chat(`Message saved for ${rawTarget}.`);
+      }
+
+      else if (command === '$hunt') {
+        const arg = args[1]?.toLowerCase();
+        if (arg === 'on') {
+          hunting = true;
+          bot.chat('Hunting enabled.');
+        } else if (arg === 'off') {
+          hunting = false;
+          bot.pvp.stop();
+          bot.chat('Hunting disabled.');
+        }
+      }
+
+      else if (command === '$ignore') {
+        if (!ignoreAllowed.has(username.toLowerCase())) return;
+
+        const state = args[1]?.toLowerCase();
+        if (state === 'true') {
+          ignoreMode = true;
+          bot.chat('Ignore mode enabled.');
+        } else if (state === 'false') {
+          ignoreMode = false;
+          bot.chat('Ignore mode disabled.');
+        } else {
+          bot.chat('Usage: $ignore true/false');
+        }
+      }
 
     });
   });
