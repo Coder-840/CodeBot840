@@ -14,7 +14,7 @@ const botArgs = {
 const PASSWORD = 'YourSecurePassword123';
 let chatLogs = [];
 let ignoreMode = true;
-const ignoreAllowed = new Set(['player_840', 'chickentender','IG_T3V_2K']);
+const ignoreAllowed = new Set(['player_840', 'chickentender','ig_t3v_2k']);
 let hunting = false;
 
 // ===== 3 MUSKETEERS SYSTEM =====
