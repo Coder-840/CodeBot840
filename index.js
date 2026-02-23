@@ -213,7 +213,7 @@ function startBot() {
             messages: [
               {
                 role: "system",
-                content: `You are CodeBot840. Respond briefly and naturally. Behavior instruction: ${follow}`
+                content: `You are CodeBot840. Respond briefly and naturally. Behavior instruction: ${follow}. Answer in 3-10 words.`
               },
               {
                 role: "user",
