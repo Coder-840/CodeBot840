@@ -53,7 +53,18 @@ function createMusket(username) {
 
     musketBots.push(b);
 
+    //// --- ADDED FIX ---
+    let loggedIn = false;
+    //// --- ADDED FIX ---
+
     b.once('spawn', () => {
+
+      //// --- ADDED FIX ---
+      setTimeout(() => {
+        b.chat(`/login ${PASSWORD}`);
+      }, 1500);
+      //// --- ADDED FIX ---
+
       const interval = setInterval(() => {
         if (!musketsActive) {
           clearInterval(interval);
@@ -66,7 +77,20 @@ function createMusket(username) {
     b.on('messagestr', message => {
       if (message.includes('/register')) b.chat(`/register ${PASSWORD} ${PASSWORD}`);
       if (message.includes('/login')) b.chat(`/login ${PASSWORD}`);
+
+      //// --- ADDED FIX ---
+      const m = message.toLowerCase();
+      if (m.includes("register")) b.chat(`/register ${PASSWORD} ${PASSWORD}`);
+      if (m.includes("login")) b.chat(`/login ${PASSWORD}`);
+      if (m.includes("welcome") || m.includes("success")) loggedIn = true;
+      //// --- ADDED FIX ---
     });
+
+    //// --- ADDED FIX ---
+    setInterval(() => {
+      if (!loggedIn) b.chat(`/login ${PASSWORD}`);
+    }, 5000);
+    //// --- ADDED FIX ---
 
     b.on('kicked', reason => {
       console.log(username + " kicked:", reason);
@@ -123,11 +147,21 @@ function startBot() {
   bot.loadPlugin(pathfinder);
   bot.loadPlugin(pvp);
 
+  //// --- ADDED FIX ---
+  let loggedIn = false;
+  //// --- ADDED FIX ---
+
   bot.once('spawn', () => {
     const mcData = require('minecraft-data')(bot.version);
     bot.pvp.movements = new Movements(bot, mcData);
     bot.pvp.movements.canDig = true;
     console.log('CodeBot840 spawned. Combat/Movement ready.');
+
+    //// --- ADDED FIX ---
+    setTimeout(() => {
+      bot.chat(`/login ${PASSWORD}`);
+    }, 1500);
+    //// --- ADDED FIX ---
 
     // ===== HUNT LOOP =====
     setInterval(() => {
@@ -204,7 +238,6 @@ function startBot() {
       const canInteract = !ignoreMode || ignoreAllowed.has(username.toLowerCase());
       if (!canInteract && command.startsWith('$')) return;
 
-      // ===== FOLLOW-UP AUTO RESPONSE =====
       const follow = followUps[username.toLowerCase()];
 if (follow) {
   const msg = message;
@@ -233,7 +266,6 @@ if (follow) {
   }
 }
 
-      // ===== COMMANDS =====
       if (command === '$help') {
         bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets, $message [player] [message], $hunt, $followup [player] [topic]');
       }
@@ -321,7 +353,6 @@ ${question}`
 
           let answer = completion?.choices?.[0]?.message?.content || "";
 
-          // remove thinking tags if model sends them
           answer = answer.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 
           if (!answer) {
@@ -329,9 +360,7 @@ ${question}`
             return;
           }
 
-          // split by paragraphs first
           const paragraphs = answer.split(/\n+/);
-
           const MAX = 240;
 
           for (let para of paragraphs) {
@@ -339,8 +368,7 @@ ${question}`
               const chunk = para.slice(0, MAX);
               bot.chat(chunk);
               para = para.slice(MAX);
-
-              await new Promise(r => setTimeout(r, 1000)); // anti-spam delay
+              await new Promise(r => setTimeout(r, 1000));
             }
           }
 
@@ -437,17 +465,21 @@ ${question}`
     });
   });
 
-  // ===== SERVER EVENTS =====
   bot.on('messagestr', (message) => {
     console.log(`SERVER: ${message}`);
     chatLogs.push(`SERVER: ${message}`);
     if (chatLogs.length > 100) chatLogs.shift();
 
-    // auto auth
     if (message.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
     if (message.includes('/login')) bot.chat(`/login ${PASSWORD}`);
 
-    // ===== OFFLINE MESSAGE DELIVERY =====
+    //// --- ADDED FIX ---
+    const m = message.toLowerCase();
+    if (m.includes("register")) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
+    if (m.includes("login")) bot.chat(`/login ${PASSWORD}`);
+    if (m.includes("welcome") || m.includes("success")) loggedIn = true;
+    //// --- ADDED FIX ---
+
     const joinMatch = message.match(/(\w+) joined/i);
     if (joinMatch) {
       const joinedName = joinMatch[1];
@@ -463,12 +495,18 @@ ${question}`
       }
     }
 
-    // ===== DETECT LOST CONNECTION =====
     if (message.toLowerCase().includes("lost connection")) {
       console.log("Detected connection loss. Reconnecting...");
       bot.quit();
     }
   });
+
+  //// --- ADDED FIX ---
+  setInterval(() => {
+    if (!loggedIn)
+      bot.chat(`/login ${PASSWORD}`);
+  }, 5000);
+  //// --- ADDED FIX ---
 
   let reconnecting = false;
   function safeReconnect() {
