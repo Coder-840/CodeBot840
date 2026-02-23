@@ -267,7 +267,7 @@ if (follow) {
 }
 
       if (command === '$help') {
-        bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets, $message [player] [message], $hunt, $followup [player] [topic]');
+        bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets, $message [player] [message], $hunt [on/off], $followup [player] [prompt]');
       }
 
       else if (command === '$followup') {
