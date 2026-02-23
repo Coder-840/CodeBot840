@@ -115,7 +115,7 @@ const followUps = {}; // key: lowercase username, value: topic
 
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.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
+  apiKey: "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"
 });
 
 function startBot() {
