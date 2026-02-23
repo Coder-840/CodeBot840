@@ -209,7 +209,7 @@ function startBot() {
       if (follow) {
         try {
           const completion = await openai.chat.completions.create({
-            model: "openrouter/auto",
+            model: "llama-3.1-8b-instant",
             messages: [
               {
                 role: "system",
@@ -268,7 +268,7 @@ function startBot() {
           const context = chatLogs.slice(-50).join(' | ');
 
           const completion = await openai.chat.completions.create({
-            model: "llama3-70b-8192",
+            model: "llama-3.1-8b-instant",
             messages: [
               {
                 role: "system",
