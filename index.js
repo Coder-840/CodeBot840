@@ -115,7 +115,7 @@ const followUps = {}; // key: lowercase username, value: topic
 
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
-  apiKey: "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"
+  apiKey: process.env.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
 });
 
 function startBot() {
@@ -208,7 +208,7 @@ function startBot() {
       const follow = followUps[username.toLowerCase()];
       if (follow) {
         try {
-          const completion = await openrouter.chat.completions.create({
+          const completion = await openai.chat.completions.create({
             model: "openrouter/auto",
             messages: [
               {
@@ -267,8 +267,8 @@ function startBot() {
         try {
           const context = chatLogs.slice(-50).join(' | ');
 
-          const completion = await openrouter.chat.completions.create({
-            model: "openrouter/auto",
+          const completion = await openai.chat.completions.create({
+            model: "llama3-70b-8192",
             messages: [
               {
                 role: "system",
