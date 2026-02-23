@@ -205,10 +205,9 @@ function startBot() {
       if (!canInteract && command.startsWith('$')) return;
 
       // ===== FOLLOW-UP AUTO RESPONSE =====
-const chatMatch = message.match(/^<([^>]+)> (.+)$/);
-if (chatMatch) {
-  const username = chatMatch[1];
-  const msg = chatMatch[2];
+      const follow = followUps[username.toLowerCase()];
+if (follow) {
+  const msg = message;
 
   const follow = followUps[username.toLowerCase()];
   if (follow) {
