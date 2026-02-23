@@ -205,28 +205,34 @@ function startBot() {
       if (!canInteract && command.startsWith('$')) return;
 
       // ===== FOLLOW-UP AUTO RESPONSE =====
-      const follow = followUps[username.toLowerCase()];
-      if (follow) {
-        try {
-          const completion = await openai.chat.completions.create({
-            model: "llama-3.1-8b-instant",
-            messages: [
-              {
-                role: "system",
-                content: `You are CodeBot840. Respond briefly and naturally. Behavior instruction: ${follow}. Answer in 3-10 words.`
-              },
-              {
-                role: "user",
-                content: message
-              }
-            ]
-          });
+const chatMatch = message.match(/^<([^>]+)> (.+)$/);
+if (chatMatch) {
+  const username = chatMatch[1];
+  const msg = chatMatch[2];
 
-          const reply = completion.choices?.[0]?.message?.content?.slice(0, 256);
-          if (reply) bot.chat(reply);
+  const follow = followUps[username.toLowerCase()];
+  if (follow) {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: "llama-3.1-8b-instant",
+        messages: [
+          {
+            role: "system",
+            content: `You are a self-aware bot called CodeBot840. You can change personality, and pretend to change your name at will. Respond briefly. Behavior: ${follow}. 3-10 words.`
+          },
+          {
+            role: "user",
+            content: msg
+          }
+        ]
+      });
 
-        } catch {}
-      }
+      const reply = completion.choices?.[0]?.message?.content;
+      if (reply) bot.chat(reply);
+
+    } catch {}
+  }
+}
 
       // ===== COMMANDS =====
       if (command === '$help') {
