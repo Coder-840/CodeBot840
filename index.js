@@ -236,7 +236,7 @@ function startBot() {
       const command = args[0].toLowerCase();
 
       const canInteract = !ignoreMode || ignoreAllowed.has(username.toLowerCase());
-      if (!canInteract && command.startsWith('$')) return;
+      if (!canInteract && command.startsWith('$') && !followUps[username.toLowerCase()]) return;
 
       const follow = followUps[username.toLowerCase()];
 if (follow) {
