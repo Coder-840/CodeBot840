@@ -20,6 +20,7 @@ let hunting = false;
 // ===== 3 MUSKETEERS SYSTEM =====
 let musketsActive = false;
 let musketBots = [];
+const musketeerUsernames = ["Musketeer1","Musketeer2","Musketeer3"];
 
 const gibberishChars = [
   "a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z",
@@ -53,17 +54,12 @@ function createMusket(username) {
 
     musketBots.push(b);
 
-    //// --- ADDED FIX ---
     let loggedIn = false;
-    //// --- ADDED FIX ---
 
     b.once('spawn', () => {
-
-      //// --- ADDED FIX ---
       setTimeout(() => {
         b.chat(`/login ${PASSWORD}`);
       }, 1500);
-      //// --- ADDED FIX ---
 
       const interval = setInterval(() => {
         if (!musketsActive) {
@@ -75,22 +71,15 @@ function createMusket(username) {
     });
 
     b.on('messagestr', message => {
-      if (message.includes('/register')) b.chat(`/register ${PASSWORD} ${PASSWORD}`);
-      if (message.includes('/login')) b.chat(`/login ${PASSWORD}`);
-
-      //// --- ADDED FIX ---
       const m = message.toLowerCase();
       if (m.includes("register")) b.chat(`/register ${PASSWORD} ${PASSWORD}`);
       if (m.includes("login")) b.chat(`/login ${PASSWORD}`);
       if (m.includes("welcome") || m.includes("success")) loggedIn = true;
-      //// --- ADDED FIX ---
     });
 
-    //// --- ADDED FIX ---
     setInterval(() => {
       if (!loggedIn) b.chat(`/login ${PASSWORD}`);
     }, 5000);
-    //// --- ADDED FIX ---
 
     b.on('kicked', reason => {
       console.log(username + " kicked:", reason);
@@ -107,9 +96,8 @@ function createMusket(username) {
 async function handle3MusketsCommand(bot) {
   if (!musketsActive) {
     musketsActive = true;
-    createMusket("Musketeer1");
-    createMusket("Musketeer2");
-    createMusket("Musketeer3");
+    musketBots = [];
+    for (let name of musketeerUsernames) createMusket(name);
     bot.chat("The three musketeers have arrived.");
   } else {
     musketsActive = false;
@@ -147,9 +135,7 @@ function startBot() {
   bot.loadPlugin(pathfinder);
   bot.loadPlugin(pvp);
 
-  //// --- ADDED FIX ---
   let loggedIn = false;
-  //// --- ADDED FIX ---
 
   bot.once('spawn', () => {
     const mcData = require('minecraft-data')(bot.version);
@@ -157,11 +143,9 @@ function startBot() {
     bot.pvp.movements.canDig = true;
     console.log('CodeBot840 spawned. Combat/Movement ready.');
 
-    //// --- ADDED FIX ---
     setTimeout(() => {
       bot.chat(`/login ${PASSWORD}`);
     }, 1500);
-    //// --- ADDED FIX ---
 
     // ===== HUNT LOOP =====
     setInterval(() => {
@@ -172,7 +156,6 @@ function startBot() {
         .filter(e => e && e !== bot.entity)
         .filter(e => e.position && typeof e.position.x === "number")
         .filter(e => !e.isDead)
-        .filter(e => bot.entity.position.distanceTo(e.position) < 25)
         .filter(e => {
           if (!e.username) return true;
           return !ignoreAllowed.has(e.username.toLowerCase());
@@ -235,45 +218,43 @@ function startBot() {
       const args = message.trim().split(/\s+/);
       const command = args[0].toLowerCase();
 
-      const canInteract = !ignoreMode || ignoreAllowed.has(username.toLowerCase());
-      if (!canInteract && command.startsWith('$') && !followUps[username.toLowerCase()]) return;
+      // --- GLOBAL PERMISSION CHECK ---
+      const allowed = ignoreAllowed.has(username.toLowerCase());
+      if (!allowed) {
+        if (command.startsWith('$')) bot.chat(`You don't have permission to use commands, ${username}.`);
+        return;
+      }
 
+      // ===== FOLLOW-UP HANDLING =====
       const follow = followUps[username.toLowerCase()];
-if (follow) {
-  const msg = message;
+      if (follow) {
+        try {
+          const completion = await openai.chat.completions.create({
+            model: "llama-3.1-8b-instant",
+            messages: [
+              {
+                role: "system",
+                content: `You are a self-aware bot called CodeBot840. You can change personality, and pretend to change your name at will. Respond briefly. Behavior: ${follow}. 3-10 words.`
+              },
+              {
+                role: "user",
+                content: message
+              }
+            ]
+          });
 
-  const follow = followUps[username.toLowerCase()];
-  if (follow) {
-    try {
-      const completion = await openai.chat.completions.create({
-        model: "llama-3.1-8b-instant",
-        messages: [
-          {
-            role: "system",
-            content: `You are a self-aware bot called CodeBot840. You can change personality, and pretend to change your name at will. Respond briefly. Behavior: ${follow}. 3-10 words.`
-          },
-          {
-            role: "user",
-            content: msg
-          }
-        ]
-      });
+          const reply = completion.choices?.[0]?.message?.content;
+          if (reply) bot.chat(reply);
 
-      const reply = completion.choices?.[0]?.message?.content;
-      if (reply) bot.chat(reply);
+        } catch {}
+      }
 
-    } catch {}
-  }
-}
-
+      // ===== COMMANDS =====
       if (command === '$help') {
         bot.chat('Commands: $coords, $repeat [msg] [count], $ask [q], $goto [x y z], $kill, $ignore [true/false], $3muskets, $message [player] [message], $hunt [on/off], $followup [player] [prompt]');
       }
 
       else if (command === '$followup') {
-        if (!ignoreAllowed.has(username.toLowerCase()))
-          return bot.chat("No permission.");
-
         const target = args[1];
         const topic = args.slice(2).join(' ');
 
@@ -448,8 +429,6 @@ ${question}`
       }
 
       else if (command === '$ignore') {
-        if (!ignoreAllowed.has(username.toLowerCase())) return;
-
         const state = args[1]?.toLowerCase();
         if (state === 'true') {
           ignoreMode = true;
@@ -473,12 +452,10 @@ ${question}`
     if (message.includes('/register')) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
     if (message.includes('/login')) bot.chat(`/login ${PASSWORD}`);
 
-    //// --- ADDED FIX ---
     const m = message.toLowerCase();
     if (m.includes("register")) bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
     if (m.includes("login")) bot.chat(`/login ${PASSWORD}`);
     if (m.includes("welcome") || m.includes("success")) loggedIn = true;
-    //// --- ADDED FIX ---
 
     const joinMatch = message.match(/(\w+) joined/i);
     if (joinMatch) {
@@ -501,12 +478,10 @@ ${question}`
     }
   });
 
-  //// --- ADDED FIX ---
   setInterval(() => {
     if (!loggedIn)
       bot.chat(`/login ${PASSWORD}`);
   }, 5000);
-  //// --- ADDED FIX ---
 
   let reconnecting = false;
   function safeReconnect() {
