@@ -139,7 +139,7 @@ const followUps = {}; // key: lowercase username, value: topic
 
 const openai = new OpenAI({
   baseURL: "https://api.groq.com/openai/v1",
-  apiKey: "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"
+  apiKey: "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"
 });
 
 function startBot() {
