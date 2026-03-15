@@ -1,16 +1,21 @@
-C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\index.js:99
-bot.on('chat', (username, message) => {
-^
+PS C:\WINDOWS\system32> cd "C:\Users\Ryan Huang\Downloads\CodeBot840-main/CodeBot840-main"
+PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main> npm install
+npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
 
-ReferenceError: bot is not defined
-    at Object.<anonymous> (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\index.js:99:1)
-    at Module._compile (node:internal/modules/cjs/loader:1812:14)
-    at Object..js (node:internal/modules/cjs/loader:1943:10)
-    at Module.load (node:internal/modules/cjs/loader:1533:32)
-    at Module._load (node:internal/modules/cjs/loader:1335:12)
-    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
-    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
-    at node:internal/main/run_main_module:33:47
+added 134 packages, and audited 135 packages in 41s
 
-Node.js v24.14.0
-PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main>
+14 packages are looking for funding
+  run `npm fund` for details
+
+5 high severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main> npm start
+
+> codebot840@1.0.0 start
+> node index.js
+
+Mineflayer detected that you are using a deprecated event (physicTick)! Please use this event (physicsTick) instead.
