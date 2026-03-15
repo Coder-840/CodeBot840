@@ -35,92 +35,103 @@ function randomGibberish() {
   return msg;
 }
 
-// ===== $SPAM BOT SYSTEM =====
+// ===== SPAM BOT SYSTEM =====
 let spamBots = [];
-let spamActive = false;
+let lastMasterMessage = null;
 
-function createSpamBot(username, silent = false, sync = false, masterBot = null) {
-  function spawn() {
-    if (!spamActive) return;
-    const b = mineflayer.createBot({
-      host: botArgs.host,
-      port: botArgs.port,
-      username: username,
-      version: botArgs.version
-    });
-
-    spamBots.push(b);
-    let loggedIn = false;
-
-    b.once('spawn', () => {
-      setTimeout(() => b.chat(`/login ${PASSWORD}`), 1500);
-
-      if (!silent) {
-        const interval = setInterval(() => {
-          if (!spamActive) return clearInterval(interval);
-          b.chat(randomGibberish());
-        }, Math.random() * 4000 + 2000);
-      }
-    });
-
-    b.on('messagestr', message => {
-      const m = message.toLowerCase();
-      if (m.includes("register")) b.chat(`/register ${PASSWORD} ${PASSWORD}`);
-      if (m.includes("login")) b.chat(`/login ${PASSWORD}`);
-      if (m.includes("welcome") || m.includes("success")) loggedIn = true;
-
-      // Sync with master bot messages
-      if (sync && masterBot && masterBot.lastMessage) {
-        if (message.toLowerCase().includes('joined')) {
-          b.chat(masterBot.lastMessage);
-        }
-      }
-    });
-
-    setInterval(() => {
-      if (!loggedIn) b.chat(`/login ${PASSWORD}`);
-    }, 5000);
-
-    b.on('kicked', reason => {
-      console.log(username + " kicked:", reason);
-      if (spamActive) setTimeout(spawn, 8000);
-    });
-
-    b.on('end', () => console.log(username + " disconnected normally."));
-    b.on('error', err => console.log(username + " error:", err.message));
+// Function to generate random bot names
+function randomBotName() {
+  const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let name = "";
+  for (let i = 0; i < 8; i++) {
+    name += letters[Math.floor(Math.random() * letters.length)];
   }
-
-  spawn();
+  return name;
 }
 
-async function handleSpamCommand(bot, args) {
-  const amount = parseInt(args[1]);
-  if (isNaN(amount) || amount < 1) return bot.chat("Usage: $spam <amount> [sync]");
+// Function to spawn a single spam bot
+function spawnSpamBot(syncMessages = false) {
+  const username = randomBotName();
+  const b = mineflayer.createBot({
+    host: botArgs.host,
+    port: botArgs.port,
+    username,
+    version: botArgs.version
+  });
 
-  const sync = args[2] === 'true';
+  spamBots.push({ bot: b, sync: syncMessages });
 
-  spamActive = true;
-  spamBots.forEach(b => { try { b.quit(); } catch {} });
-  spamBots = [];
+  let loggedIn = false;
 
-  for (let i = 0; i < amount; i++) {
-    const name = "Bot" + Math.random().toString(36).substring(2, 8);
-    createSpamBot(name, !sync, sync, bot);
+  b.once('spawn', () => {
+    setTimeout(() => b.chat(`/login ${PASSWORD}`), 1500);
+
+    if (!syncMessages) {
+      const interval = setInterval(() => {
+        if (!b.entity) return;
+        b.chat(randomGibberish());
+      }, Math.random() * 4000 + 2000);
+    }
+  });
+
+  b.on('messagestr', msg => {
+    const m = msg.toLowerCase();
+    if (m.includes("register")) b.chat(`/register ${PASSWORD} ${PASSWORD}`);
+    if (m.includes("login")) b.chat(`/login ${PASSWORD}`);
+    if (m.includes("welcome") || m.includes("success")) loggedIn = true;
+  });
+
+  setInterval(() => {
+    if (!loggedIn) b.chat(`/login ${PASSWORD}`);
+  }, 5000);
+
+  b.on('kicked', reason => {
+    console.log(username + " kicked:", reason);
+    // Respawn only if bots should still be active
+    setTimeout(() => spawnSpamBot(syncMessages), 8000);
+  });
+
+  b.on('end', () => console.log(username + " disconnected."));
+  b.on('error', err => console.log(username + " error:", err.message));
+}
+
+// Command listener for $spam
+bot.on('chat', (username, message) => {
+  if (username !== bot.username) return;
+
+  const args = message.trim().split(/\s+/);
+  const command = args[0].toLowerCase();
+
+  if (command === '$spam') {
+    const amount = parseInt(args[1]);
+    const syncFlag = args[2]?.toLowerCase() === 'true';
+
+    if (isNaN(amount) || amount <= 0) {
+      bot.chat("Usage: $spam <amount> [true/false]");
+      return;
+    }
+
+    bot.chat(`Spawning ${amount} bot(s), sync: ${syncFlag}`);
+
+    for (let i = 0; i < amount; i++) {
+      setTimeout(() => spawnSpamBot(syncFlag), i * 1000); // stagger join
+    }
   }
+});
 
-  bot.chat(`${amount} bots joined${sync ? " silently and synced" : " with gibberish"}.`);
-}
+// Keep track of last message from CodeBot840 for syncing
+bot.on('chat', (username, message) => {
+  if (username === bot.username) {
+    lastMasterMessage = message;
 
-// ===== OFFLINE MESSAGE SYSTEM =====
-const MESSAGE_FILE = './offlineMessages.json';
-let offlineMessages = {};
-if (fs.existsSync(MESSAGE_FILE)) {
-  try { offlineMessages = JSON.parse(fs.readFileSync(MESSAGE_FILE)); } catch { offlineMessages = {}; }
-}
-
-function saveMessages() {
-  fs.writeFileSync(MESSAGE_FILE, JSON.stringify(offlineMessages, null, 2));
-}
+    // Sync message to all bots that have sync = true
+    for (const { bot: b, sync } of spamBots) {
+      if (sync && b.entity) {
+        b.chat(message);
+      }
+    }
+  }
+});
 
 // ===== FOLLOW-UP SYSTEM =====
 const followUps = {}; // key: lowercase username, value: topic
