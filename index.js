@@ -128,6 +128,8 @@ const followUps={}
 // ===== START BOT =====
 function startBot(){
 
+console.log("Connecting to server...");
+  
 const bot = mineflayer.createBot(botArgs)
 
 bot.loadPlugin(pathfinder)
