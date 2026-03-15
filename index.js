@@ -132,6 +132,12 @@ console.log("Connecting to server...");
   
 const bot = mineflayer.createBot(botArgs)
 
+bot.on('login', () => console.log("Logged in"))
+bot.on('spawn', () => console.log("Spawned in world"))
+bot.on('kicked', r => console.log("Kicked:", r))
+bot.on('error', e => console.log("Error:", e))
+bot.on('end', () => console.log("Connection ended"))
+
 bot.loadPlugin(pathfinder)
 bot.loadPlugin(pvp)
 
