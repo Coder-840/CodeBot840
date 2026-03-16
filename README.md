@@ -1,21 +1,11 @@
-PS C:\WINDOWS\system32> cd "C:\Users\Ryan Huang\Downloads\CodeBot840-main/CodeBot840-main"
-PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main> npm install
-npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+3TssE8B6z spawned
+C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\node_modules\mineflayer\lib\plugins\chat.js:153
+      bot._client.chat(message)
+                  ^
 
-added 134 packages, and audited 135 packages in 41s
-
-14 packages are looking for funding
-  run `npm fund` for details
-
-5 high severity vulnerabilities
-
-To address all issues (including breaking changes), run:
-  npm audit fix --force
-
-Run `npm audit` for details.
-PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main> npm start
-
-> codebot840@1.0.0 start
-> node index.js
-
-Mineflayer detected that you are using a deprecated event (physicTick)! Please use this event (physicsTick) instead.
+TypeError: bot._client.chat is not a function
+    at chatWithHeader (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\node_modules\mineflayer\lib\plugins\chat.js:153:19)
+    at bot.chat (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\node_modules\mineflayer\lib\plugins\chat.js:194:5)
+    at Timeout._onTimeout (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\index.js:85:37)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
