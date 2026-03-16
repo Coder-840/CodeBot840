@@ -4,139 +4,155 @@ const pvp = require('mineflayer-pvp').plugin
 const OpenAI = require('openai')
 const fs = require('fs')
 
-// ===== CONFIG =====
 const botArgs = {
-  host: 'noBnoT.org',
-  port: 25565,
-  username: 'CodeBot840',
-  version: '1.12.2'
+ host: 'noBnoT.org',
+ port: 25565,
+ username: 'CodeBot840',
+ version: '1.12.2'
 }
 
-const PASSWORD = "YourSecurePassword123"
-const GROQ_API_KEY = "PUT_YOUR_GROQ_API_KEY_HERE"
+const PASSWORD = 'YourSecurePassword123'
 
-// ===== OPENAI (GROQ) =====
-const openai = new OpenAI({
-  baseURL: "https://api.groq.com/openai/v1",
-  apiKey: GROQ_API_KEY
-})
+let chatLogs=[]
+let ignoreMode=true
+let hunting=false
+let spamMode=false
 
-// ===== STATE =====
-let chatLogs = []
-let hunting = false
-let ignoreMode = true
-
-const ignoreAllowed = new Set([
-  'player_840','chickentender','ig_t3v_2k',
-  'lightdrag3x','lightdrag3n','1234npc1234','k0ngaz'
+const ignoreAllowed=new Set([
+'player_840','chickentender','ig_t3v_2k','lightdrag3x','lightdrag3n','1234NPC1234','k0ngaz'
 ])
 
-// ===== OFFLINE MESSAGES =====
-let offlineMessages = {}
+// =================
+// RANDOM UTILITIES
+// =================
 
-if (fs.existsSync("offlineMessages.json")) {
-  offlineMessages = JSON.parse(fs.readFileSync("offlineMessages.json"))
+const chars="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+function randomName(){
+ let name=""
+ const len=Math.floor(Math.random()*6)+6
+ for(let i=0;i<len;i++){
+  name+=chars[Math.floor(Math.random()*chars.length)]
+ }
+ return name
+}
+
+const gibberishChars=[...chars,"!","@","#","$","%","&","*"]
+
+function randomGibberish(){
+ let msg=""
+ const len=Math.floor(Math.random()*8)+3
+ for(let i=0;i<len;i++){
+  msg+=gibberishChars[Math.floor(Math.random()*gibberishChars.length)]
+ }
+ return msg
+}
+
+// =================
+// SUMMON SYSTEM
+// =================
+
+let summonedBots=[]
+let syncMessages=false
+
+function createSummonedBot(name){
+
+ function spawn(){
+
+ const b=mineflayer.createBot({
+  host:botArgs.host,
+  port:botArgs.port,
+  username:name,
+  version:botArgs.version
+ })
+
+ summonedBots.push(b)
+
+ let logged=false
+
+ b.once('spawn',()=>{
+
+  setTimeout(()=>{b.chat(`/login ${PASSWORD}`)},1500)
+
+  if(!syncMessages){
+
+   const spam=setInterval(()=>{
+    if(!syncMessages) b.chat(randomGibberish())
+   },Math.random()*4000+2000)
+
+   b.on('end',()=>clearInterval(spam))
+  }
+
+ })
+
+ b.on('messagestr',(message)=>{
+
+ const m=message.toLowerCase()
+
+ if(m.includes("register"))
+ b.chat(`/register ${PASSWORD} ${PASSWORD}`)
+
+ if(m.includes("login"))
+ b.chat(`/login ${PASSWORD}`)
+
+ if(m.includes("welcome")||m.includes("success"))
+ logged=true
+
+ })
+
+ setInterval(()=>{
+  if(!logged) b.chat(`/login ${PASSWORD}`)
+ },5000)
+
+ b.on('kicked',()=>setTimeout(spawn,8000))
+ }
+
+ spawn()
+}
+
+function summonBots(amount,sync){
+ syncMessages=sync
+ for(let i=0;i<amount;i++) createSummonedBot(randomName())
+}
+
+function unsummonBots(){
+ summonedBots.forEach(b=>{try{b.quit()}catch{}})
+ summonedBots=[]
+}
+
+// =================
+// OFFLINE MESSAGES
+// =================
+
+const MESSAGE_FILE='./offlineMessages.json'
+let offlineMessages={}
+
+if(fs.existsSync(MESSAGE_FILE)){
+ try{offlineMessages=JSON.parse(fs.readFileSync(MESSAGE_FILE))}catch{}
 }
 
 function saveMessages(){
-  fs.writeFileSync("offlineMessages.json", JSON.stringify(offlineMessages,null,2))
+ fs.writeFileSync(MESSAGE_FILE,JSON.stringify(offlineMessages,null,2))
 }
 
-// ===== GIBBERISH =====
-const gibberishChars = [
-  ...'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-  '§ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑ'.split('')
-]
+// =================
+// FOLLOWUP SYSTEM
+// =================
 
-function randomGibberish(){
-  let msg=""
-  const len=Math.floor(Math.random()*6)+3
-  for(let i=0;i<len;i++){
-    msg+=gibberishChars[Math.floor(Math.random()*gibberishChars.length)]
-  }
-  return msg
-}
-
-// ===== SPAM BOTS =====
-let spamBots=[]
-let lastMasterMessage=null
-
-function randomBotName(){
-  const chars="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-  let name=""
-  for(let i=0;i<8;i++){
-    name+=chars[Math.floor(Math.random()*chars.length)]
-  }
-  return name
-}
-
-function spawnSpamBot(sync=false){
-
-  const username=randomBotName()
-
-  const b=mineflayer.createBot({
-    host:botArgs.host,
-    port:botArgs.port,
-    username,
-    version:botArgs.version
-  })
-
-  spamBots.push({bot:b,sync})
-
-  let loggedIn=false
-
-  b.once('spawn',()=>{
-    setTimeout(()=>b.chat(`/login ${PASSWORD}`),1500)
-
-    if(!sync){
-      setInterval(()=>{
-        if(!b.entity)return
-        b.chat(randomGibberish())
-      },Math.random()*4000+2000)
-    }
-  })
-
-  b.on('messagestr',(msg)=>{
-    const m=msg.toLowerCase()
-
-    if(m.includes("register")) b.chat(`/register ${PASSWORD} ${PASSWORD}`)
-    if(m.includes("login")) b.chat(`/login ${PASSWORD}`)
-
-    if(m.includes("welcome")||m.includes("success")){
-      loggedIn=true
-    }
-  })
-
-  setInterval(()=>{
-    if(!loggedIn){
-      b.chat(`/login ${PASSWORD}`)
-    }
-  },5000)
-
-  b.on('kicked',(r)=>{
-    console.log(username,"kicked:",r)
-    setTimeout(()=>spawnSpamBot(sync),8000)
-  })
-
-  b.on('error',(e)=>console.log(username,"error:",e.message))
-  b.on('end',()=>console.log(username,"disconnected"))
-}
-
-// ===== FOLLOWUP SYSTEM =====
 const followUps={}
 
-// ===== START BOT =====
+const openai=new OpenAI({
+ baseURL:"https://api.groq.com/openai/v1",
+ apiKey:"gsk_YOUR_GROQ_KEY"
+})
+
+// =================
+// MAIN BOT
+// =================
+
 function startBot(){
 
-console.log("Connecting to server...");
-  
-const bot = mineflayer.createBot(botArgs)
-
-bot.on('login', () => console.log("Logged in"))
-bot.on('spawn', () => console.log("Spawned in world"))
-bot.on('kicked', r => console.log("Kicked:", r))
-bot.on('error', e => console.log("Error:", e))
-bot.on('end', () => console.log("Connection ended"))
+const bot=mineflayer.createBot(botArgs)
 
 bot.loadPlugin(pathfinder)
 bot.loadPlugin(pvp)
@@ -148,20 +164,26 @@ bot.once('spawn',()=>{
 const mcData=require('minecraft-data')(bot.version)
 bot.pvp.movements=new Movements(bot,mcData)
 
-console.log("CodeBot840 spawned")
-
 setTimeout(()=>bot.chat(`/login ${PASSWORD}`),1500)
 
-// ===== HUNT LOOP =====
+// =================
+// HUNT LOOP
+// =================
+
 setInterval(()=>{
 
-if(!hunting||!bot.entity)return
+if(!hunting) return
+if(!bot.entity) return
 
 const targets=Object.values(bot.entities)
-.filter(e=>e && e.position && !e.isDead)
-.filter(e=>!e.username || !ignoreAllowed.has(e.username.toLowerCase()))
+.filter(e=>e!==bot.entity)
+.filter(e=>!e.isDead)
+.filter(e=>{
+ if(!e.username) return true
+ return !ignoreAllowed.has(e.username.toLowerCase())
+})
 
-if(!targets.length)return
+if(!targets.length) return
 
 targets.sort((a,b)=>
 a.position.distanceTo(bot.entity.position)-
@@ -170,341 +192,285 @@ b.position.distanceTo(bot.entity.position))
 const target=targets[0]
 
 if(bot.entity.position.distanceTo(target.position)>3){
-
-bot.pathfinder.setGoal(
-new goals.GoalNear(
-target.position.x,
-target.position.y,
-target.position.z,
-2
-),true)
-
+ bot.pathfinder.setGoal(
+ new goals.GoalNear(target.position.x,target.position.y,target.position.z,2),true)
 }
 
 if(bot.entity.position.distanceTo(target.position)<4){
-bot.pvp.attack(target)
+ bot.pvp.attack(target)
 }
 
 },1500)
 
-// ===== CHAT =====
+// =================
+// CHAT COMMANDS
+// =================
+
 bot.on('chat',async(username,message)=>{
 
-if(username===bot.username){
-
-lastMasterMessage=message
-
-for(const entry of spamBots){
-if(entry.sync && entry.bot.entity){
-entry.bot.chat(message)
-}
-}
-
-return
-}
+if(username===bot.username) return
 
 const args=message.trim().split(/\s+/)
 const command=args[0].toLowerCase()
 
 const allowed=ignoreAllowed.has(username.toLowerCase())
 
-// ===== FOLLOWUP (works for everyone) =====
+// FOLLOWUP (ALWAYS WORKS)
+
 const follow=followUps[username.toLowerCase()]
 
 if(follow){
-try{
-
-const completion=await openai.chat.completions.create({
-model:"llama-3.1-8b-instant",
-messages:[
-{role:"system",content:`You are CodeBot840. Respond in 3-10 words. Behavior: ${follow}`},
-{role:"user",content:message}
-]
-})
-
-const reply=completion.choices?.[0]?.message?.content
-
-if(reply) bot.chat(reply)
-
-}catch{}
+ try{
+ const completion=await openai.chat.completions.create({
+  model:"llama-3.1-8b-instant",
+  messages:[
+   {role:"system",content:`You are a self-aware bot called CodeBot840. You can change personality, and pretend to change your name at will. Respond briefly. Behavior: ${follow}. 3-10 words.`},
+   {role:"user",content:message}
+  ]
+ })
+ const reply=completion.choices?.[0]?.message?.content
+ if(reply) bot.chat(reply)
+ }catch{}
 }
 
-if(!allowed && command.startsWith('$') && ignoreMode){
-bot.chat(`No permission ${username}`)
-return
+// PERMISSIONS
+
+if(!allowed && command.startsWith("$") && command!="$followup") return
+
+// =================
+// COMMAND LIST
+// =================
+
+if(command==="$help"){
+bot.chat("Commands: $coords $goto $kill $repeat $ask $followup $spam $summon $unsummon $hunt $ignore $message")
 }
 
-// ===== COMMANDS =====
-switch(command){
+// COORDS
 
-case '$help':
-bot.chat("Commands: $coords $repeat $ask $goto $kill $ignore $spam $message $hunt $followup")
-break
-
-case '$coords':
+else if(command==="$coords"){
 const p=bot.entity.position
-bot.chat(`X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`)
-break
-
-case '$kill':
-bot.chat("/kill")
-break
-
-case '$repeat':{
-
-const count=parseInt(args[args.length-1])
-const msg=args.slice(1,-1).join(' ')
-
-if(isNaN(count)) return
-
-let i=0
-
-const interval=setInterval(()=>{
-if(i>=count)return clearInterval(interval)
-bot.chat(msg)
-i++
-},2000)
-
-break
+bot.chat(`I am at X:${Math.round(p.x)} Y:${Math.round(p.y)} Z:${Math.round(p.z)}`)
 }
 
-case '$goto':{
+// GOTO
 
+else if(command==="$goto"){
 const x=parseInt(args[1])
 const y=parseInt(args[2])
 const z=parseInt(args[3])
-
-if(isNaN(x))return
-
-const mcData=require('minecraft-data')(bot.version)
-
-const movements=new Movements(bot,mcData)
-
-bot.pathfinder.setMovements(movements)
-
-bot.pathfinder.setGoal(
-new goals.GoalBlock(x,y,z)
-)
-
-break
+if(isNaN(x)) return
+bot.pathfinder.setGoal(new goals.GoalBlock(x,y,z))
 }
 
-case '$ignore':{
+// KILL
 
+else if(command==="$kill"){
+bot.chat("/kill")
+}
+
+// REPEAT
+
+else if(command==="$repeat"){
+const count=parseInt(args[args.length-1])
+const text=args.slice(1,-1).join(" ")
+if(isNaN(count)) return
+let i=0
+const loop=setInterval(()=>{
+if(i>=count) return clearInterval(loop)
+bot.chat(text)
+i++
+},2000)
+}
+
+// SPAM
+
+else if(command==="$spam"){
 const state=args[1]
-
-if(state==="true"){
-ignoreMode=true
-bot.chat("Ignore enabled")
-}
-else if(state==="false"){
-ignoreMode=false
-bot.chat("Ignore disabled")
+if(state==="on"){spamMode=true;bot.chat("Spam enabled")}
+if(state==="off"){spamMode=false;bot.chat("Spam disabled")}
 }
 
-break
-}
+// ASK AI (FULL PROMPT)
 
-case '$hunt':{
+else if(command==="$ask"){
 
-const state=args[1]
-
-if(state==="on"){
-hunting=true
-bot.chat("Hunt enabled")
-}
-
-if(state==="off"){
-hunting=false
-bot.pvp.stop()
-bot.chat("Hunt disabled")
-}
-
-break
-}
-
-case '$spam':{
-
-const amount=parseInt(args[1])
-const sync=args[2]==="true"
-
-if(isNaN(amount)){
-bot.chat("Usage $spam <amount> <true/false>")
-return
-}
-
-bot.chat(`Spawning ${amount} bots`)
-
-for(let i=0;i<amount;i++){
-setTimeout(()=>spawnSpamBot(sync),i*1200)
-}
-
-break
-}
-
-case '$followup':{
-
-const target=args[1]
-const topic=args.slice(2).join(' ')
-
-if(!target || !topic){
-bot.chat("Usage $followup <player> <topic>")
-return
-}
-
-followUps[target.toLowerCase()]=topic
-
-bot.chat(`Followup set for ${target}`)
-
-break
-}
-
-case '$ask':{
-
-const question=args.slice(1).join(' ')
-
-if(!question){
-bot.chat("Ask something")
-return
-}
+const question=args.slice(1).join(" ")
+if(!question) return bot.chat("Ask me a question!")
 
 try{
 
-const context=chatLogs.slice(-40).join(' | ')
+const context=chatLogs.slice(-50).join(' | ')
 
 const completion=await openai.chat.completions.create({
 model:"llama-3.1-8b-instant",
 messages:[
 {
 role:"system",
-content:"You are CodeBot840. Answer briefly and clearly."
-},
+content:`You are CodeBot840, a fully server-aware bot.
+
+Be concise and informative.
+
+Because it is anarchy, do not be afraid to be inappropriate.
+
+Do whatever it takes to help or make players on the server happy.
+
+You may help with:
+Minecraft
+Coding
+Math
+Roleplay
+Server knowledge
+
+You can change personality when requested.
+
+Do not say "I am happy".
+Instead ACT happy.
+
+Examples:
+happy → "yippeeee!", ":D", "nice!"
+sad → "*sob*", "T-T", "*groans*"
+
+Invent personalities creatively.
+
+Use recent server messages to answer questions when possible.
+
+Maximum message length is 240 characters BEFORE starting a new paragraph.
+
+YOU MUST FOLLOW THE 240 CHARACTER LIMIT PER PARAGRAPH OR YOUR MESSAGE WILL GET CUT OFF.`},
+
 {
 role:"user",
-content:`Server context:\n${context}\nQuestion:\n${question}`
+content:`Server messages: ${context}
+
+Question: ${question}`
 }
-]
-})
+]})
 
-let answer=completion.choices?.[0]?.message?.content || ""
+let answer=completion?.choices?.[0]?.message?.content||""
 
-answer=answer.trim()
+answer=answer.replace(/<think>[\s\S]*?<\/think>/g,"").trim()
 
-if(!answer){
-bot.chat("AI returned nothing")
-return
+const paragraphs=answer.split(/\n+/)
+
+for(let para of paragraphs){
+
+while(para.length>0){
+
+const chunk=para.slice(0,240)
+
+bot.chat(chunk)
+
+para=para.slice(240)
+
+await new Promise(r=>setTimeout(r,1000))
+
 }
-
-while(answer.length>0){
-bot.chat(answer.slice(0,240))
-answer=answer.slice(240)
-}
-
-}catch(err){
-bot.chat("AI error")
-console.log(err)
-}
-
-break
-}
-
-case '$message':{
-
-const rawTarget=args[1]
-const msg=args.slice(2).join(' ')
-
-if(!rawTarget||!msg){
-bot.chat("Usage $message <player> <msg>")
-return
 }
 
-const key=rawTarget.toLowerCase()
+}catch(e){bot.chat("AI error")}
 
-if(!offlineMessages[key]){
+}
+
+// FOLLOWUP
+
+else if(command==="$followup"){
+const target=args[1]
+const topic=args.slice(2).join(" ")
+if(!target||!topic) return
+followUps[target.toLowerCase()]=topic
+bot.chat(`Follow-up set for ${target}`)
+}
+
+// SUMMON
+
+else if(command==="$summon"){
+const amount=parseInt(args[1])
+const sync=args[2]==="true"
+if(isNaN(amount)) return
+summonBots(amount,sync)
+bot.chat(`Summoned ${amount} bots.`)
+}
+
+// UNSUMMON
+
+else if(command==="$unsummon"){
+unsummonBots()
+bot.chat("Bots removed.")
+}
+
+// HUNT
+
+else if(command==="$hunt"){
+const state=args[1]
+if(state==="on"){hunting=true;bot.chat("Hunting enabled")}
+if(state==="off"){hunting=false;bot.chat("Hunting disabled")}
+}
+
+// IGNORE
+
+else if(command==="$ignore"){
+const state=args[1]
+if(state==="true"){ignoreMode=true;bot.chat("Ignore enabled")}
+if(state==="false"){ignoreMode=false;bot.chat("Ignore disabled")}
+}
+
+// MESSAGE
+
+else if(command==="$message"){
+
+const target=args[1]
+const msg=args.slice(2).join(" ")
+
+if(!target||!msg) return
+
+const key=target.toLowerCase()
+
+if(!offlineMessages[key])
 offlineMessages[key]=[]
-}
 
 offlineMessages[key].push({
 sender:username,
-text:msg,
-originalName:rawTarget
+text:msg
 })
 
 saveMessages()
 
-bot.chat(`Saved for ${rawTarget}`)
-
-break
-}
+bot.chat(`Message saved for ${target}`)
 
 }
 
 })
 
-// ===== SERVER MESSAGES =====
-bot.on('messagestr',(msg)=>{
+})
 
-console.log("SERVER:",msg)
+// =================
+// SYNC BOT CHAT
+// =================
 
-chatLogs.push(msg)
+bot.on('chat',(username,message)=>{
+
+if(username!=="CodeBot840") return
+if(!syncMessages) return
+
+summonedBots.forEach(b=>{
+try{b.chat(message)}catch{}
+})
+
+})
+
+// =================
+// SERVER LOGGING
+// =================
+
+bot.on('messagestr',(message)=>{
+chatLogs.push(message)
 if(chatLogs.length>100) chatLogs.shift()
-
-const m=msg.toLowerCase()
-
-if(m.includes("register")){
-bot.chat(`/register ${PASSWORD} ${PASSWORD}`)
-}
-
-if(m.includes("login")){
-bot.chat(`/login ${PASSWORD}`)
-}
-
-if(m.includes("welcome")||m.includes("success")){
-loggedIn=true
-}
-
-// deliver offline messages
-const joinMatch=msg.match(/(\w+) joined/i)
-
-if(joinMatch){
-
-const name=joinMatch[1]
-const key=name.toLowerCase()
-
-if(offlineMessages[key]){
-
-offlineMessages[key].forEach(m=>{
-bot.chat(`/msg ${name} ${m.sender}: ${m.text}`)
 })
 
-delete offlineMessages[key]
-
-saveMessages()
-
-}
-
-}
-
-})
-
-setInterval(()=>{
-if(!loggedIn){
-bot.chat(`/login ${PASSWORD}`)
-}
-},5000)
-
-function reconnect(){
-console.log("Reconnecting in 10s...")
-setTimeout(startBot,10000)
-}
-
-bot.on('end',reconnect)
-bot.on('kicked',reconnect)
-bot.on('error',reconnect)
-
-})
+bot.on('end',()=>setTimeout(startBot,10000))
+bot.on('kicked',()=>setTimeout(startBot,10000))
+bot.on('error',()=>setTimeout(startBot,10000))
 
 }
 
 startBot()
-
