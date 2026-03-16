@@ -61,30 +61,40 @@ function createSummonedBot(name){
     summonedBots.push(b)
     let logged = false
 
-    b.once('spawn', () => {
-      try {
-        console.log(`${name} spawned`)
-        setTimeout(()=>b.chat(`/login ${PASSWORD}`),1500)
+function spawn(){
+  const b = mineflayer.createBot({
+    host: botArgs.host,
+    port: botArgs.port,
+    username: name,
+    version: botArgs.version
+  })
+  summonedBots.push(b)
+  let logged = false
 
-        if(!syncMessages){
-          const spam = setInterval(()=>{
-            if(!syncMessages) b.chat(randomGibberish())
-          }, Math.random()*4000+2000)
-          b.on('end', ()=>clearInterval(spam))
-        }
-      } catch(e){ console.log(`${name} spawn error:`, e) }
-    })
+  b.once('login', () => { // <-- wait for full login
+    console.log(`${name} fully logged in`)
+    
+    // login command for the server (some servers require /login even after logging in)
+    setTimeout(()=>b.chat(`/login ${PASSWORD}`), 1500)
 
-    b.on('messagestr', msg => {
-      const m = msg.toLowerCase()
-      if(m.includes("register")) b.chat(`/register ${PASSWORD} ${PASSWORD}`)
-      if(m.includes("login")) b.chat(`/login ${PASSWORD}`)
-      if(m.includes("welcome")||m.includes("success")) logged = true
-    })
+    if(!syncMessages){
+      const spam = setInterval(()=>{
+        if(!syncMessages) b.chat(randomGibberish())
+      }, Math.random()*4000+2000)
+      b.on('end', ()=>clearInterval(spam))
+    }
+  })
 
-    setInterval(()=>{ if(!logged) b.chat(`/login ${PASSWORD}`) },5000)
-    b.on('kicked', ()=>setTimeout(spawn,8000))
-  }
+  b.on('messagestr', msg => {
+    const m = msg.toLowerCase()
+    if(m.includes("register")) b.chat(`/register ${PASSWORD} ${PASSWORD}`)
+    if(m.includes("login")) b.chat(`/login ${PASSWORD}`)
+    if(m.includes("welcome")||m.includes("success")) logged = true
+  })
+
+  setInterval(()=>{ if(!logged) b.chat(`/login ${PASSWORD}`) },5000)
+  b.on('kicked', ()=>setTimeout(spawn,8000))
+}
   spawn()
 }
 
