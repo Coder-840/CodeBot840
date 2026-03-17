@@ -48,3 +48,88 @@ Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: No "exports" main defined in C:\Users\Rya
     at Module.require (node:internal/modules/cjs/loader:1556:12) {
   code: 'ERR_PACKAGE_PATH_NOT_EXPORTED'
 }
+
+Node.js v24.14.0
+PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main> npm uninstall socks-proxy-agent
+
+removed 4 packages, and audited 135 packages in 3s
+
+14 packages are looking for funding
+  run `npm fund` for details
+
+5 high severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main> npm uninstall socks-proxy-agent@7
+
+up to date, audited 135 packages in 3s
+
+14 packages are looking for funding
+  run `npm fund` for details
+
+5 high severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main> npm install
+
+up to date, audited 135 packages in 4s
+
+14 packages are looking for funding
+  run `npm fund` for details
+
+5 high severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main> npm install socks-proxy-agent@7
+
+added 4 packages, and audited 139 packages in 3s
+
+14 packages are looking for funding
+  run `npm fund` for details
+
+5 high severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main> node index.js
+Error: read ECONNRESET
+    at TCP.onStreamRead (node:internal/stream_base_commons:216:20) {
+  errno: -4077,
+  code: 'ECONNRESET',
+  syscall: 'read'
+}
+Error: read ECONNRESET
+    at TCP.onStreamRead (node:internal/stream_base_commons:216:20) {
+  errno: -4077,
+  code: 'ECONNRESET',
+  syscall: 'read'
+}
+Error: read ECONNRESET
+    at TCP.onStreamRead (node:internal/stream_base_commons:216:20) {
+  errno: -4077,
+  code: 'ECONNRESET',
+  syscall: 'read'
+}
+Error: read ECONNRESET
+    at TCP.onStreamRead (node:internal/stream_base_commons:216:20) {
+  errno: -4077,
+  code: 'ECONNRESET',
+  syscall: 'read'
+}
+Error: read ECONNRESET
+    at TCP.onStreamRead (node:internal/stream_base_commons:216:20) {
+  errno: -4077,
+  code: 'ECONNRESET',
+  syscall: 'read'
+}
