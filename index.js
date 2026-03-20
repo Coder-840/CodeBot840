@@ -1,8 +1,6 @@
 const mineflayer = require('mineflayer')
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder')
 const pvp = require('mineflayer-pvp').plugin
-const { SocksProxyAgent } = require('socks-proxy-agent')
-const axios = require('axios')
 const OpenAI = require('openai')
 const fs = require('fs')
 
@@ -17,10 +15,8 @@ const botArgs = {
 const PASSWORD = 'YourSecurePassword123'
 
 // ================= STATE =================
-let proxyPool = []
-let workingProxies = []
 let summonedBots = []
-let syncMessages = false
+let syncMode = false
 let chatLogs = []
 let hunting = false
 
@@ -54,102 +50,25 @@ function randomName(){
  for(let i=0;i<len;i++) name+=chars[Math.floor(Math.random()*chars.length)]
  return name
 }
-function randomGibberish(){
- const c=chars+"!@#$%&*"
- let msg=""
- const len=Math.floor(Math.random()*8)+3
- for(let i=0;i<len;i++) msg+=c[Math.floor(Math.random()*c.length)]
- return msg
-}
-
-// ================= PROXIES =================
-const fallbackProxies=[
-"137.59.49.133:1080",
-"114.108.177.104:1080",
-"162.241.66.135:1080",
-"108.181.34.82:1080"
-]
-
-async function fetchProxies(){
- try{
-  const url="https://proxylist.geonode.com/api/proxy-list?limit=100&page=1&sort_by=lastChecked&sort_type=desc&protocols=socks5"
-  const res=await axios.get(url)
-  proxyPool=res.data.data.map(p=>`${p.ip}:${p.port}`)
- }catch{
-  proxyPool=fallbackProxies
- }
-}
-
-async function testProxy(proxy){
- return new Promise(resolve=>{
-  const agent=new SocksProxyAgent(`socks://${proxy}`)
-  const testBot=mineflayer.createBot({
-   host:botArgs.host,
-   port:botArgs.port,
-   username:"Test"+Math.random(),
-   version:botArgs.version,
-   agent
-  })
-
-  let done=false
-  const timeout=setTimeout(()=>{
-   if(!done){done=true;try{testBot.quit()}catch{};resolve(false)}
-  },8000)
-
-  testBot.once('login',()=>{
-   if(!done){done=true;clearTimeout(timeout);testBot.quit();resolve(true)}
-  })
-
-  testBot.on('error',()=>{
-   if(!done){done=true;clearTimeout(timeout);resolve(false)}
-  })
- })
-}
-
-async function buildProxyPool(){
- workingProxies=[]
- for(const p of proxyPool){
-  const ok=await testProxy(p)
-  if(ok) workingProxies.push(p)
-  if(workingProxies.length>=10) break
- }
- if(!workingProxies.length) workingProxies=fallbackProxies
-}
-
-function getProxy(){
- if(!workingProxies.length) return null
- return workingProxies[Math.floor(Math.random()*workingProxies.length)]
-}
 
 // ================= SUMMON =================
 function createSummonedBot(name){
 
- let proxy=getProxy()
- let agent=proxy?new SocksProxyAgent(`socks://${proxy}`):undefined
-
  function spawn(){
 
-  const b=mineflayer.createBot({
-   host:botArgs.host,
-   port:botArgs.port,
-   username:name,
-   version:botArgs.version,
-   agent
+  const b = mineflayer.createBot({
+   host: botArgs.host,
+   port: botArgs.port,
+   username: name,
+   version: botArgs.version
   })
 
-  let spam=null
   summonedBots.push({bot:b,name})
 
   b.once('login',()=>{
-   setTimeout(()=>b.chat(`/login ${PASSWORD}`),2000)
-
    setTimeout(()=>{
-    if(!syncMessages){
-     spam=setInterval(()=>{
-      try{b.chat(randomGibberish())}catch{}
-     },Math.random()*4000+3000)
-    }
-   },8000)
+    b.chat(`/login ${PASSWORD}`)
+   }, Math.random()*8000 + 4000)
   })
 
   b.on('messagestr',msg=>{
@@ -158,14 +77,7 @@ function createSummonedBot(name){
    if(m.includes("login")) b.chat(`/login ${PASSWORD}`)
   })
 
-  b.on('end',()=>{
-   if(spam) clearInterval(spam)
-   setTimeout(()=>{
-    proxy=getProxy()
-    agent=proxy?new SocksProxyAgent(`socks://${proxy}`):undefined
-    spawn()
-   },15000)
-  })
+  b.on('end',()=>{})
 
   b.on('error',()=>{})
  }
@@ -173,10 +85,9 @@ function createSummonedBot(name){
  spawn()
 }
 
-function summonBots(amount,sync){
- syncMessages=sync
+function summonBots(amount){
  for(let i=0;i<amount;i++){
-  setTimeout(()=>createSummonedBot(randomName()),i*12000)
+  setTimeout(()=>createSummonedBot(randomName()), i*20000)
  }
 }
 
@@ -209,12 +120,10 @@ function startBot(){
   if(!hunting||!bot.entity) return
 
   const targets=Object.values(bot.entities)
+   .filter(e=>e.type === 'player')
    .filter(e=>e!==bot.entity)
    .filter(e=>!e.isDead)
-   .filter(e=>{
-    if(!e.username) return true
-    return !ignoreAllowed.has(e.username.toLowerCase())
-   })
+   .filter(e=>!ignoreAllowed.has(e.username?.toLowerCase()))
 
   if(!targets.length) return
 
@@ -230,7 +139,7 @@ function startBot(){
   }
 
   if(bot.entity.position.distanceTo(target.position)<4){
-   bot.pvp.attack(target)
+   if(!bot.pvp.target) bot.pvp.attack(target)
   }
 
  },1500)
@@ -243,6 +152,15 @@ function startBot(){
   const args=message.split(/\s+/)
   const cmd=args[0].toLowerCase()
   const allowed=ignoreAllowed.has(username.toLowerCase())
+
+  // SYNC CHAT
+  if(syncMode && allowed){
+   summonedBots.forEach(x=>{
+    try{
+     x.bot.chat(message)
+    }catch{}
+   })
+  }
 
   // FOLLOWUP ALWAYS
   const follow=followUps[username.toLowerCase()]
@@ -364,8 +282,9 @@ YOU MUST FOLLOW THE 240 CHARACTER LIMIT PER PARAGRAPH OR YOUR MESSAGE WILL GET C
    const n=parseInt(args[1])
    const sync=args[2]==="true"
    if(isNaN(n)) return
-   summonBots(n,sync)
-   bot.chat(`Summoning ${n}`)
+   syncMode = sync
+   summonBots(n)
+   bot.chat(`Summoning ${n} | Sync: ${syncMode}`)
   }
 
   else if(cmd==="$unsummon"){
@@ -403,7 +322,5 @@ YOU MUST FOLLOW THE 240 CHARACTER LIMIT PER PARAGRAPH OR YOUR MESSAGE WILL GET C
 
 // ================= START =================
 ;(async()=>{
- await fetchProxies()
- await buildProxyPool()
  startBot()
 })()
