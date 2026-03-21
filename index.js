@@ -35,9 +35,13 @@ function saveProxies() {
 }
 
 const SOURCES = [
-    'https://api.proxyscrape.com/v2/?request=getproxies&protocol=socks5&timeout=2000&country=all',
+    'https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt',
+    'https://api.proxyscrape.com/v2/?request=getproxies&protocol=socks5&timeout=10000&country=all',
     'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt',
-    'https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt'
+    'https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt',
+    'https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt',
+    'https://raw.githubusercontent.com/mmpx12/proxy-list/master/socks5.txt',
+    'https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt'
 ];
 
 function parseList(text) {
@@ -45,9 +49,11 @@ function parseList(text) {
         .map(l => l.trim())
         .filter(l => l.includes(':'))
         .map(l => {
-            const [ip, port] = l.split(':');
+            // handle socks5://ip:port format as well as plain ip:port
+            const clean = l.replace(/^socks5:\/\//i, '');
+            const [ip, port] = clean.split(':');
             const p = parseInt(port);
-            if (![1080, 1085, 9050].includes(p)) return null;
+            if (!ip || isNaN(p)) return null;
             return { ip, port: p };
         })
         .filter(Boolean);
@@ -60,7 +66,7 @@ function testProxyFull(ip, port = 1080) {
             proxy: { host: ip, port, type: 5 },
             command: 'connect',
             destination: { host: 'noBnoT.org', port: 25565 },
-            timeout: 5000
+            timeout: 10000
         }).then(info => { info.socket.destroy(); resolve(true); })
           .catch(() => resolve(false));
     });
@@ -71,7 +77,7 @@ async function fetchProxies() {
         let all = [];
         for (const url of SOURCES) {
             try {
-                const res = await axios.get(url, { timeout: 5000 });
+                const res = await axios.get(url, { timeout: 8000 });
                 all.push(...parseList(res.data));
             } catch {}
         }
@@ -84,7 +90,7 @@ async function fetchProxies() {
         }
 
         console.log(`[SCRAPER] ${unique.length} proxies fetched`);
-        const batch = unique.slice(0, 100);
+        const batch = unique.slice(0, 150);
 
         const results = await Promise.allSettled(batch.map(p => testProxyFull(p.ip, p.port)));
         for (let i = 0; i < results.length; i++) {
@@ -104,7 +110,7 @@ async function fetchProxies() {
 
 setInterval(fetchProxies, 10000);
 
-// FIX: snapshot proxies before async work so mutations during await don't crash the filter
+// Snapshot proxies before async work so mutations during await don't crash the filter
 setInterval(async () => {
     if (proxies.length === 0) return;
     console.log('[CLEANER] Checking proxies...');
@@ -144,10 +150,11 @@ function randomGibberish() {
 }
 
 function randomName() {
-    const c = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    return Array.from({ length: 6 + (Math.random() * 6 | 0) }, () =>
-        c[Math.floor(Math.random() * c.length)]
-    ).join('');
+    const adjectives = ['Dark','Cool','Fast','Wild','Blue','Red','Epic','Slim','Iron','Void','Neon','Rust','Grim','Jade','Ashy'];
+    const nouns = ['Fox','Wolf','Bear','Hawk','Tiger','Raven','Cobra','Viper','Ghost','Storm','Lynx','Drake','Rook','Pike','Wren'];
+    const num = Math.floor(Math.random() * 9999);
+    return adjectives[Math.floor(Math.random() * adjectives.length)] +
+           nouns[Math.floor(Math.random() * nouns.length)] + num;
 }
 
 // ----------------- SPAWN BOT WITH SOCKS PROXY -----------------
@@ -166,13 +173,15 @@ async function spawnBot(proxy) {
     proxyUsage[proxy.ip]++;
 
     const bot = mineflayer.createBot({
-        username: 'CodeBot_' + randomName(),
+        username: randomName(),
         version: '1.12.2',
+        timeout: 60000,
         connect: (client) => {
             SocksClient.createConnection({
                 proxy: { host: proxy.ip, port: proxy.port, type: 5 },
                 command: 'connect',
-                destination: { host: 'noBnoT.org', port: 25565 }
+                destination: { host: 'noBnoT.org', port: 25565 },
+                timeout: 10000
             }).then(info => {
                 client.setSocket(info.socket);
                 client.emit('connect');
@@ -208,14 +217,13 @@ async function spawnBot(proxy) {
 
     bots.push(bot);
 
-    // FIX: wait for actual login confirmation before reporting success
-    // spawnBot returning true now means the bot actually made it into the server
+    // Wait for actual spawn before reporting success
     return new Promise(resolve => {
         const timeout = setTimeout(() => {
             cleanup();
             console.log(`[TIMEOUT] ${bot.username} via ${proxy.ip} never logged in`);
             resolve(false);
-        }, 20000);
+        }, 30000);
 
         function cleanup() {
             clearTimeout(timeout);
@@ -251,7 +259,8 @@ function startMainBot() {
         host: 'noBnoT.org',
         port: 25565,
         username: 'CodeBot840',
-        version: '1.12.2'
+        version: '1.12.2',
+        timeout: 60000
     });
 
     setupBot(bot, true);
@@ -339,10 +348,11 @@ function setupBot(bot, isMain = false, proxy = null) {
                 bot.chat('Commands: $coords $goto $kill $repeat $ask $followup $summon $unsummon $hunt $ignore');
                 break;
 
-            case '$coords':
+            case '$coords': {
                 const pos = bot.entity.position;
                 bot.chat(`X:${pos.x | 0} Y:${pos.y | 0} Z:${pos.z | 0}`);
                 break;
+            }
 
             case '$goto': {
                 const [gx, gy, gz] = parts.slice(1, 4).map(Number);
@@ -448,14 +458,20 @@ Do not add filler phrases like "Great question!" or "Of course!".`
                 if (isNaN(n)) return;
                 if (proxies.length === 0) { bot.chat("No working proxies yet!"); return; }
                 syncChat = sync;
-                let spawned = 0, attempts = 0;
-                while (spawned < n && attempts < proxies.length * 2) {
-                    const proxy = proxies[Math.floor(Math.random() * proxies.length)];
-                    if (await spawnBot(proxy)) spawned++;
-                    attempts++;
-                    await new Promise(r => setTimeout(r, 3000));
+
+                // Shuffle and pick n unique proxies — one bot per IP
+                const shuffled = [...proxies].sort(() => Math.random() - 0.5);
+                const picked = shuffled.slice(0, n);
+                if (picked.length < n) {
+                    bot.chat(`Only ${picked.length} proxies available, spawning what we can`);
                 }
-                bot.chat(`Summoned ${spawned}/${n} bots | Proxies: ${proxies.length} | Sync: ${sync}`);
+
+                let spawned = 0;
+                for (const proxy of picked) {
+                    if (await spawnBot(proxy)) spawned++;
+                    await new Promise(r => setTimeout(r, 5000));
+                }
+                bot.chat(`Summoned ${spawned}/${picked.length} bots | Proxies: ${proxies.length} | Sync: ${sync}`);
                 break;
             }
 
