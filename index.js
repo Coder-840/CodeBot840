@@ -10,10 +10,10 @@ const cors = require('cors');
 const path = require('path');
 const axios = require('axios');
 const net = require('net');
-const { SocksProxyAgent } = require('socks-proxy-agent'); // ✅ FIXED
+const { SocksProxyAgent } = require('socks-proxy-agent');
 
 const O = new OpenAI({
-    apiKey: "API_KEY",
+    apiKey: process.env.OPENAI_API_KEY,
     baseURL: "https://api.groq.com/openai/v1"
 });
 
@@ -47,10 +47,7 @@ function parseList(text) {
         .map(l => {
             const [ip, port] = l.split(':');
             const p = parseInt(port);
-
-            // ✅ ONLY SOCKS PORTS
             if (![1080, 1085, 9050].includes(p)) return null;
-
             return { ip, port: p };
         })
         .filter(Boolean);
@@ -65,13 +62,11 @@ function testProxy(ip, port = 1080, timeout = 2000) {
             socket.destroy();
             resolve(true);
         });
-
         socket.on('error', () => resolve(false));
         socket.on('timeout', () => {
             socket.destroy();
             resolve(false);
         });
-
         socket.connect(port, ip);
     });
 }
@@ -79,7 +74,6 @@ function testProxy(ip, port = 1080, timeout = 2000) {
 async function fetchProxies() {
     try {
         let all = [];
-
         for (const url of SOURCES) {
             try {
                 const res = await axios.get(url, { timeout: 5000 });
@@ -89,7 +83,6 @@ async function fetchProxies() {
 
         const unique = [];
         const seen = new Set();
-
         for (const p of all) {
             const key = `${p.ip}:${p.port}`;
             if (!seen.has(key)) {
@@ -99,7 +92,6 @@ async function fetchProxies() {
         }
 
         console.log(`[SCRAPER] ${unique.length} proxies fetched`);
-
         const batch = unique.slice(0, 100);
 
         const results = await Promise.allSettled(
@@ -129,15 +121,12 @@ setInterval(async () => {
     if (proxies.length === 0) return;
 
     console.log('[CLEANER] Checking proxies...');
-
     const results = await Promise.allSettled(
         proxies.map(p => testProxy(p.ip, p.port))
     );
-
     proxies = proxies.filter((p, i) =>
         results[i].status === 'fulfilled' && results[i].value
     );
-
     console.log(`[CLEANER] Remaining: ${proxies.length}`);
     saveProxies();
 
@@ -145,7 +134,7 @@ setInterval(async () => {
 
 /** ------------------- BOT SYSTEM ------------------- **/
 const bots = [];
-const proxyUsage = {}; // ✅ track usage
+const proxyUsage = {};
 const MAX_PER_PROXY = 4;
 
 const PASSWORD = 'YourSecurePassword123';
@@ -155,6 +144,7 @@ let messageLog = [];
 let huntMode = false;
 let syncChat = false;
 const followUps = {};
+const followCooldown = {};
 
 function randomName() {
     const c = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -162,11 +152,8 @@ function randomName() {
 }
 
 function spawnBot(proxy) {
-
     if (!proxyUsage[proxy.ip]) proxyUsage[proxy.ip] = 0;
-
     if (proxyUsage[proxy.ip] >= MAX_PER_PROXY) return false;
-
     proxyUsage[proxy.ip]++;
 
     const bot = mineflayer.createBot({
@@ -177,9 +164,11 @@ function spawnBot(proxy) {
         agent: new SocksProxyAgent(`socks5://${proxy.ip}:${proxy.port}`)
     });
 
-    setupBot(bot);
+    setupBot(bot, false, proxy);
 
     bot.on('end', () => {
+        const idx = bots.indexOf(bot);
+        if (idx !== -1) bots.splice(idx, 1);
         proxyUsage[proxy.ip] = Math.max(0, proxyUsage[proxy.ip] - 1);
         setTimeout(() => spawnBot(proxy), 10000);
     });
@@ -201,12 +190,14 @@ function startMainBot() {
     bot.on('end', () => setTimeout(startMainBot, 10000));
 }
 
-function setupBot(bot, isMain = false) {
-
+function setupBot(bot, isMain = false, proxy = null) {
     bot.loadPlugin(Pathfinder);
     bot.loadPlugin(pvp);
 
-    bot.once('login', () => setTimeout(() => bot.chat(`/login ${PASSWORD}`), 2000));
+    bot.once('login', () => {
+        setTimeout(() => bot.chat(`/login ${PASSWORD}`), 2000);
+        console.log(`${bot.username} connected via ${proxy ? proxy.ip : 'MAIN IP'}`);
+    });
 
     bot.on('messagestr', msg => {
         messageLog.push(msg);
@@ -220,10 +211,8 @@ function setupBot(bot, isMain = false) {
 
     setInterval(() => {
         if (!huntMode || !bot.entity) return;
-
         let targets = Object.values(bot.entities)
             .filter(e => e.type === 'player' && e !== bot.entity && !e.isDead && !ignoredUsers.has(e.username?.toLowerCase()));
-
         if (!targets.length) return;
 
         targets.sort((a, b) =>
@@ -246,12 +235,15 @@ function setupBot(bot, isMain = false) {
         const parts = message.split(/\s+/);
         const cmd = parts[0].toLowerCase();
         const isIgnored = ignoredUsers.has(username.toLowerCase());
-
         const lowerUser = username.toLowerCase();
 
-        // ✅ FOLLOW-UP TRIGGER (ANY USER)
-        if (followUps[lowerUser]) {
-            try { bot.chat(followUps[lowerUser]); } catch {}
+        // ✅ FOLLOW-UP HANDLER (MAIN BOT ONLY)
+        if (isMain && followUps[lowerUser]) {
+            const now = Date.now();
+            if (!followCooldown[lowerUser] || now - followCooldown[lowerUser] > 5000) {
+                followCooldown[lowerUser] = now;
+                try { bot.chat(followUps[lowerUser]); } catch {}
+            }
         }
 
         if (syncChat && isIgnored) bots.forEach(b => { try { b.chat(message); } catch {} });
@@ -259,7 +251,6 @@ function setupBot(bot, isMain = false) {
         if (!cmd.startsWith('$')) return;
 
         switch (cmd) {
-
             case '$help':
                 bot.chat('Commands: $coords $goto $kill $repeat $ask $followup $summon $unsummon $hunt $ignore');
                 break;
@@ -294,10 +285,8 @@ function setupBot(bot, isMain = false) {
             case '$ask':
                 const question = parts.slice(1).join(' ');
                 if (!question) return bot.chat('Ask something!');
-
                 try {
                     const recent = messageLog.slice(-50).join(' | ');
-
                     const resp = await O.chat.completions.create({
                         model: "llama-3.1-8b-instant",
                         messages: [
@@ -333,7 +322,6 @@ YOU MUST FOLLOW THE 240 CHARACTER LIMIT PER PARAGRAPH OR YOUR MESSAGE WILL GET C
 
                     let out = resp.choices?.[0]?.message?.content || "";
                     out = out.replace(/<think>[\s\S]*?<\/think>/g,'').trim();
-
                     for (let line of out.split(/\n+/)) {
                         while (line.length) {
                             bot.chat(line.slice(0,240));
@@ -348,15 +336,15 @@ YOU MUST FOLLOW THE 240 CHARACTER LIMIT PER PARAGRAPH OR YOUR MESSAGE WILL GET C
                 break;
 
             case '$followup':
-                if (!isIgnored) {
-                    bot.chat("You can't set follow-ups.");
-                    return;
-                }
-
+                if (!isIgnored) { bot.chat("You can't set follow-ups."); return; }
                 const fUser = parts[1];
                 const fText = parts.slice(2).join(' ');
+                if (!fUser) return;
 
-                if (fUser && fText) {
+                if (fText.toLowerCase() === 'clear') {
+                    delete followUps[fUser.toLowerCase()];
+                    bot.chat(`Follow-up cleared for ${fUser}`);
+                } else if (fText) {
                     followUps[fUser.toLowerCase()] = fText;
                     bot.chat(`Follow-up set for ${fUser}`);
                 }
@@ -365,25 +353,15 @@ YOU MUST FOLLOW THE 240 CHARACTER LIMIT PER PARAGRAPH OR YOUR MESSAGE WILL GET C
             case '$summon':
                 let n = parseInt(parts[1]);
                 let sync = parts[2] === 'true';
-
                 if (isNaN(n)) return;
-
-                if (proxies.length === 0) {
-                    bot.chat("No working proxies yet!");
-                    return;
-                }
-
+                if (proxies.length === 0) { bot.chat("No working proxies yet!"); return; }
                 syncChat = sync;
-
-                let spawned = 0;
-                let attempts = 0;
-
+                let spawned = 0, attempts = 0;
                 while (spawned < n && attempts < proxies.length * 2) {
-                    const proxy = proxies[attempts % proxies.length];
+                    const proxy = proxies[Math.floor(Math.random() * proxies.length)];
                     if (spawnBot(proxy)) spawned++;
                     attempts++;
                 }
-
                 bot.chat(`Summoned ${spawned}/${n} bots | Proxies: ${proxies.length}`);
                 break;
 
