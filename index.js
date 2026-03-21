@@ -10,7 +10,7 @@ const cors = require('cors');
 const path = require('path');
 const axios = require('axios');
 const net = require('net');
-const SocksProxyAgent = require('socks-proxy-agent');
+const { SocksProxyAgent } = require('socks-proxy-agent'); // ✅ FIXED
 
 const O = new OpenAI({
     apiKey: "API_KEY",
@@ -34,9 +34,6 @@ function saveProxies() {
     fs.writeFileSync(proxiesFile, JSON.stringify(proxies, null, 2));
 }
 
-let scanning = true;
-
-// proxy sources
 const SOURCES = [
     'https://api.proxyscrape.com/v2/?request=getproxies&protocol=socks5&timeout=2000&country=all',
     'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt',
@@ -49,8 +46,14 @@ function parseList(text) {
         .filter(l => l.includes(':'))
         .map(l => {
             const [ip, port] = l.split(':');
-            return { ip, port: parseInt(port) || 1080 };
-        });
+            const p = parseInt(port);
+
+            // ✅ ONLY SOCKS PORTS
+            if (![1080, 1085, 9050].includes(p)) return null;
+
+            return { ip, port: p };
+        })
+        .filter(Boolean);
 }
 
 function testProxy(ip, port = 1080, timeout = 2000) {
@@ -122,7 +125,6 @@ async function fetchProxies() {
 
 setInterval(fetchProxies, 10000);
 
-// cleaner
 setInterval(async () => {
     if (proxies.length === 0) return;
 
@@ -143,6 +145,9 @@ setInterval(async () => {
 
 /** ------------------- BOT SYSTEM ------------------- **/
 const bots = [];
+const proxyUsage = {}; // ✅ track usage
+const MAX_PER_PROXY = 4;
+
 const PASSWORD = 'YourSecurePassword123';
 const ignoredUsers = new Set(['player_840','chickentender','ig_t3v_2k','lightdrag3x','lightdrag3n','1234NPC1234','k0ngaz']);
 
@@ -157,6 +162,13 @@ function randomName() {
 }
 
 function spawnBot(proxy) {
+
+    if (!proxyUsage[proxy.ip]) proxyUsage[proxy.ip] = 0;
+
+    if (proxyUsage[proxy.ip] >= MAX_PER_PROXY) return false;
+
+    proxyUsage[proxy.ip]++;
+
     const bot = mineflayer.createBot({
         host: 'noBnoT.org',
         port: 25565,
@@ -166,7 +178,14 @@ function spawnBot(proxy) {
     });
 
     setupBot(bot);
+
+    bot.on('end', () => {
+        proxyUsage[proxy.ip] = Math.max(0, proxyUsage[proxy.ip] - 1);
+        setTimeout(() => spawnBot(proxy), 10000);
+    });
+
     bots.push(bot);
+    return true;
 }
 
 function startMainBot() {
@@ -228,9 +247,16 @@ function setupBot(bot, isMain = false) {
         const cmd = parts[0].toLowerCase();
         const isIgnored = ignoredUsers.has(username.toLowerCase());
 
+        const lowerUser = username.toLowerCase();
+
+        // ✅ FOLLOW-UP TRIGGER (ANY USER)
+        if (followUps[lowerUser]) {
+            try { bot.chat(followUps[lowerUser]); } catch {}
+        }
+
         if (syncChat && isIgnored) bots.forEach(b => { try { b.chat(message); } catch {} });
 
-        if (!isIgnored && !cmd.startsWith('$')) return;
+        if (!cmd.startsWith('$')) return;
 
         switch (cmd) {
 
@@ -322,8 +348,14 @@ YOU MUST FOLLOW THE 240 CHARACTER LIMIT PER PARAGRAPH OR YOUR MESSAGE WILL GET C
                 break;
 
             case '$followup':
+                if (!isIgnored) {
+                    bot.chat("You can't set follow-ups.");
+                    return;
+                }
+
                 const fUser = parts[1];
                 const fText = parts.slice(2).join(' ');
+
                 if (fUser && fText) {
                     followUps[fUser.toLowerCase()] = fText;
                     bot.chat(`Follow-up set for ${fUser}`);
@@ -343,11 +375,16 @@ YOU MUST FOLLOW THE 240 CHARACTER LIMIT PER PARAGRAPH OR YOUR MESSAGE WILL GET C
 
                 syncChat = sync;
 
-                for (let i = 0; i < n; i++) {
-                    spawnBot(proxies[i % proxies.length]);
+                let spawned = 0;
+                let attempts = 0;
+
+                while (spawned < n && attempts < proxies.length * 2) {
+                    const proxy = proxies[attempts % proxies.length];
+                    if (spawnBot(proxy)) spawned++;
+                    attempts++;
                 }
 
-                bot.chat(`Summoned ${n} bots | Proxies: ${proxies.length}`);
+                bot.chat(`Summoned ${spawned}/${n} bots | Proxies: ${proxies.length}`);
                 break;
 
             case '$unsummon':
