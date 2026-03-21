@@ -234,6 +234,7 @@ function setupBot(bot, isMain = false, proxy = null) {
     });
 
     bot.on('messagestr', msg => {
+        if (!isMain) console.log(`[BOT ${bot.username}]`, msg);
         messageLog.push(msg);
         if (messageLog.length > 100) messageLog.shift();
         if (isMain) console.log('[CHAT]', msg);
