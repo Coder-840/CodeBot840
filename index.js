@@ -13,7 +13,7 @@ const net = require('net');
 const SocksProxyAgent = require('socks-proxy-agent');
 
 const O = new OpenAI({
-    apiKey: process.env.GROQ_API_KEY,
+    apiKey: "API_KEY",
     baseURL: "https://api.groq.com/openai/v1"
 });
 
