@@ -1,23 +1,23 @@
 {
   "name": "codebot840",
-  "version": "1.0.0",
-  "description": "Anarchy bot with AI, Pathfinding, and Combat",
+  "version": "2.0.0",
+  "description": "Anarchy bot with AI, proxy scraping, pathfinding, and combat",
   "main": "index.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
+    "axios": "^1.6.7",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
     "mineflayer": "^4.20.0",
     "mineflayer-pathfinder": "^2.4.0",
     "mineflayer-pvp": "^1.2.0",
     "minecraft-data": "^3.0.0",
     "openai": "^4.28.0",
-    "axios": "^1.6.7",
-    "express": "^4.19.2",
-    "cors": "^2.8.5",
     "ping": "^0.4.4",
-    "socks": "^2.8.3",
-    "nedb-promises": "^6.2.3"
+    "socks-proxy-agent": "7.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
