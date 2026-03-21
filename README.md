@@ -1,53 +1,29 @@
-Windows PowerShell
-Copyright (C) Microsoft Corporation. All rights reserved.
+[CLEANER] Checking proxies...
+[SCRAPER] 1695 proxies fetched
+[CHAT] <supadupacool> $ew
+[CLEANER] Remaining: 52
+[VALID] 192.206.202.1:8080 | Total: 53
+[CHAT] <VoidSlayer> what shouywe do
+[SCRAPER] 1695 proxies fetched
+[VALID] 192.145.96.180:1080 | Total: 54
+[CHAT] <VoidSlayer> should
+[SCRAPER] 1695 proxies fetched
+[CHAT] <Player_840> $summon 3 true
+C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\index.js:165
+        agent: new SocksProxyAgent(`socks5://${proxy.ip}:${proxy.port}`)
+               ^
 
-Try the new cross-platform PowerShell https://aka.ms/pscore6
-
-PS C:\WINDOWS\system32> cd "C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main"
-PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main> npm install socks-proxy-agent net
-
-up to date, audited 225 packages in 5s
-
-37 packages are looking for funding
-  run `npm fund` for details
-
-5 high severity vulnerabilities
-
-To address all issues (including breaking changes), run:
-  npm audit fix --force
-
-Run `npm audit` for details.
-PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main> npm install
-
-up to date, audited 225 packages in 3s
-
-37 packages are looking for funding
-  run `npm fund` for details
-
-5 high severity vulnerabilities
-
-To address all issues (including breaking changes), run:
-  npm audit fix --force
-
-Run `npm audit` for details.
-PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main> node index.js
-node:internal/modules/cjs/loader:692
-      throw e;
-      ^
-
-Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: No "exports" main defined in C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\node_modules\socks-proxy-agent\package.json
-    at exportsNotFound (node:internal/modules/esm/resolve:314:10)
-    at packageExportsResolve (node:internal/modules/esm/resolve:605:13)
-    at resolveExports (node:internal/modules/cjs/loader:685:36)
-    at Module._findPath (node:internal/modules/cjs/loader:752:31)
-    at Module._resolveFilename (node:internal/modules/cjs/loader:1441:27)
-    at defaultResolveImpl (node:internal/modules/cjs/loader:1066:19)
-    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1071:22)
-    at Module._load (node:internal/modules/cjs/loader:1242:25)
-    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
-    at Module.require (node:internal/modules/cjs/loader:1556:12) {
-  code: 'ERR_PACKAGE_PATH_NOT_EXPORTED'
-}
+TypeError: SocksProxyAgent is not a constructor
+    at spawnBot (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\index.js:165:16)
+    at EventEmitter.<anonymous> (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\index.js:347:21)
+    at EventEmitter.emit (node:events:508:28)
+    at EventEmitter.<anonymous> (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\node_modules\mineflayer\lib\plugins\chat.js:85:13)
+    at EventEmitter.emit (node:events:520:35)
+    at Client.<anonymous> (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\node_modules\mineflayer\lib\plugins\chat.js:131:9)
+    at Client.emit (node:events:508:28)
+    at Client.<anonymous> (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\node_modules\minecraft-protocol\src\client\play.js:79:18)
+    at Client.emit (node:events:508:28)
+    at emitPacket (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\node_modules\minecraft-protocol\src\client.js:85:12)
 
 Node.js v24.14.0
 PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main>
