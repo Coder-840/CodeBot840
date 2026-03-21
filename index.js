@@ -54,7 +54,6 @@ function parseList(text) {
 }
 
 // Deep test: actually tunnels through the proxy to the server
-// This ensures only proxies that can reach noBnoT.org are added to the pool
 function testProxyFull(ip, port = 1080) {
     return new Promise(resolve => {
         SocksClient.createConnection({
@@ -149,9 +148,18 @@ function randomName() {
 }
 
 // ----------------- SPAWN BOT WITH SOCKS PROXY -----------------
-function spawnBot(proxy) {
+async function spawnBot(proxy) {
     if (!proxyUsage[proxy.ip]) proxyUsage[proxy.ip] = 0;
     if (proxyUsage[proxy.ip] >= MAX_PER_PROXY) return false;
+
+    // Re-verify the proxy is still alive right before using it
+    const alive = await testProxyFull(proxy.ip, proxy.port);
+    if (!alive) {
+        proxies = proxies.filter(p => !(p.ip === proxy.ip && p.port === proxy.port));
+        saveProxies();
+        return false;
+    }
+
     proxyUsage[proxy.ip]++;
 
     const bot = mineflayer.createBot({
@@ -402,7 +410,7 @@ Do not add filler phrases like "Great question!" or "Of course!".`
                 let spawned = 0, attempts = 0;
                 while (spawned < n && attempts < proxies.length * 2) {
                     const proxy = proxies[Math.floor(Math.random() * proxies.length)];
-                    if (spawnBot(proxy)) spawned++;
+                    if (await spawnBot(proxy)) spawned++;
                     attempts++;
                 }
                 bot.chat(`Summoned ${spawned}/${n} bots | Proxies: ${proxies.length} | Sync: ${sync}`);
