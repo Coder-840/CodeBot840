@@ -1,7 +1,7 @@
 {
   "name": "codebot840",
   "version": "2.0.0",
-  "description": "Anarchy bot with AI, proxy scraping, pathfinding, and combat",
+  "description": "Anarchy bot with AI, proxy scraping, pathfinding, bot flood, and built-in combat",
   "main": "index.js",
   "type": "commonjs",
   "scripts": {
