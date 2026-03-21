@@ -103,11 +103,14 @@ async function fetchProxies() {
 }
 
 setInterval(fetchProxies, 10000);
+
+// FIX: snapshot proxies before async work so mutations during await don't crash the filter
 setInterval(async () => {
     if (proxies.length === 0) return;
     console.log('[CLEANER] Checking proxies...');
-    const results = await Promise.allSettled(proxies.map(p => testProxyFull(p.ip, p.port)));
-    proxies = proxies.filter((_, i) => results[i].status === 'fulfilled' && results[i].value);
+    const snapshot = [...proxies];
+    const results = await Promise.allSettled(snapshot.map(p => testProxyFull(p.ip, p.port)));
+    proxies = snapshot.filter((_, i) => results[i].status === 'fulfilled' && results[i].value);
     console.log(`[CLEANER] Remaining: ${proxies.length}`);
     saveProxies();
 }, 60000);
@@ -152,7 +155,7 @@ async function spawnBot(proxy) {
     if (!proxyUsage[proxy.ip]) proxyUsage[proxy.ip] = 0;
     if (proxyUsage[proxy.ip] >= MAX_PER_PROXY) return false;
 
-    // Re-verify the proxy is still alive right before using it
+    // Re-verify proxy is still alive right before using it
     const alive = await testProxyFull(proxy.ip, proxy.port);
     if (!alive) {
         proxies = proxies.filter(p => !(p.ip === proxy.ip && p.port === proxy.port));
@@ -204,7 +207,42 @@ async function spawnBot(proxy) {
     });
 
     bots.push(bot);
-    return true;
+
+    // FIX: wait for actual login confirmation before reporting success
+    // spawnBot returning true now means the bot actually made it into the server
+    return new Promise(resolve => {
+        const timeout = setTimeout(() => {
+            cleanup();
+            console.log(`[TIMEOUT] ${bot.username} via ${proxy.ip} never logged in`);
+            resolve(false);
+        }, 20000);
+
+        function cleanup() {
+            clearTimeout(timeout);
+            bot.removeListener('spawn', onSpawn);
+            bot.removeListener('end', onFail);
+            bot.removeListener('error', onFail);
+        }
+
+        function onSpawn() {
+            cleanup();
+            console.log(`[JOINED] ${bot.username} via ${proxy.ip}`);
+            resolve(true);
+        }
+
+        function onFail(err) {
+            cleanup();
+            if (err) console.log(`[FAIL] ${bot.username} via ${proxy.ip}:`, err.message || err);
+            const idx = bots.indexOf(bot);
+            if (idx !== -1) bots.splice(idx, 1);
+            proxyUsage[proxy.ip] = Math.max(0, proxyUsage[proxy.ip] - 1);
+            resolve(false);
+        }
+
+        bot.once('spawn', onSpawn);
+        bot.once('end', onFail);
+        bot.once('error', onFail);
+    });
 }
 
 // ----------------- MAIN BOT -----------------
@@ -225,8 +263,10 @@ function setupBot(bot, isMain = false, proxy = null) {
     bot.loadPlugin(Pathfinder);
     bot.loadPlugin(pvp);
 
-    // Fix: remap deprecated physicTick -> physicsTick used internally by mineflayer-pvp
-    bot._client?.on('physicTick', () => bot.emit('physicsTick'));
+    // Fix deprecated physicTick event from mineflayer-pvp
+    bot.once('spawn', () => {
+        bot._client?.on('physicTick', () => bot.emit('physicsTick'));
+    });
 
     bot.once('login', () => {
         setTimeout(() => bot.chat(`/login ${PASSWORD}`), 2000);
