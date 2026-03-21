@@ -1,29 +1,42 @@
-[CLEANER] Checking proxies...
-[SCRAPER] 1695 proxies fetched
-[CHAT] <supadupacool> $ew
-[CLEANER] Remaining: 52
-[VALID] 192.206.202.1:8080 | Total: 53
-[CHAT] <VoidSlayer> what shouywe do
-[SCRAPER] 1695 proxies fetched
-[VALID] 192.145.96.180:1080 | Total: 54
-[CHAT] <VoidSlayer> should
-[SCRAPER] 1695 proxies fetched
-[CHAT] <Player_840> $summon 3 true
-C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\index.js:165
-        agent: new SocksProxyAgent(`socks5://${proxy.ip}:${proxy.port}`)
-               ^
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
 
-TypeError: SocksProxyAgent is not a constructor
-    at spawnBot (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\index.js:165:16)
-    at EventEmitter.<anonymous> (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\index.js:347:21)
-    at EventEmitter.emit (node:events:508:28)
-    at EventEmitter.<anonymous> (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\node_modules\mineflayer\lib\plugins\chat.js:85:13)
-    at EventEmitter.emit (node:events:520:35)
-    at Client.<anonymous> (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\node_modules\mineflayer\lib\plugins\chat.js:131:9)
-    at Client.emit (node:events:508:28)
-    at Client.<anonymous> (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\node_modules\minecraft-protocol\src\client\play.js:79:18)
-    at Client.emit (node:events:508:28)
-    at emitPacket (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\node_modules\minecraft-protocol\src\client.js:85:12)
+Try the new cross-platform PowerShell https://aka.ms/pscore6
+
+PS C:\WINDOWS\system32> cd "C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main"
+PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main> npm install
+npm error code ETARGET
+npm error notarget No matching version found for mineflayer-pvp@^2.3.0.
+npm error notarget In most cases you or one of your dependencies are requesting
+npm error notarget a package version that doesn't exist.
+npm error A complete log of this run can be found in: C:\Users\Ryan Huang\AppData\Local\npm-cache\_logs\2026-03-21T13_58_02_128Z-debug-0.log
+PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main> npm start
+
+> codebot840@1.0.0 start
+> node index.js
+
+node:internal/modules/cjs/loader:1459
+  throw err;
+  ^
+
+Error: Cannot find module 'mineflayer'
+Require stack:
+- C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\index.js
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1456:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1066:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1071:22)
+    at Module._load (node:internal/modules/cjs/loader:1242:25)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.require (node:internal/modules/cjs/loader:1556:12)
+    at require (node:internal/modules/helpers:152:16)
+    at Object.<anonymous> (C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main\index.js:3:20)
+    at Module._compile (node:internal/modules/cjs/loader:1812:14)
+    at Object..js (node:internal/modules/cjs/loader:1943:10) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\Ryan Huang\\Downloads\\CodeBot840-main\\CodeBot840-main\\index.js'
+  ]
+}
 
 Node.js v24.14.0
 PS C:\Users\Ryan Huang\Downloads\CodeBot840-main\CodeBot840-main>
