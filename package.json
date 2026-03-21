@@ -12,7 +12,12 @@
     "mineflayer-pvp": "^1.2.0",
     "minecraft-data": "^3.0.0",
     "openai": "^4.28.0",
-    "axios": "^1.6.7"
+    "axios": "^1.6.7",
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "ping": "^0.4.4",
+    "socks": "^2.8.3",
+    "nedb-promises": "^6.2.3"
   },
   "engines": {
     "node": ">=18.0.0"
