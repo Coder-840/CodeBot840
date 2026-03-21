@@ -453,6 +453,7 @@ Do not add filler phrases like "Great question!" or "Of course!".`
                     const proxy = proxies[Math.floor(Math.random() * proxies.length)];
                     if (await spawnBot(proxy)) spawned++;
                     attempts++;
+                    await new Promise(r => setTimeout(r, 3000));
                 }
                 bot.chat(`Summoned ${spawned}/${n} bots | Proxies: ${proxies.length} | Sync: ${sync}`);
                 break;
