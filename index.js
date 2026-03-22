@@ -1,7 +1,7 @@
 'use strict';
 
 const mineflayer = require('mineflayer');
-const { pathfinder: Pathfinder, goals: Goals } = require('mineflayer-pathfinder');
+const { pathfinder: Pathfinder, goals: Goals, Movements } = require('mineflayer-pathfinder');
 const pvp = require('mineflayer-pvp').plugin;
 const OpenAI = require('openai');
 const fs = require('fs');
@@ -9,7 +9,6 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const axios = require('axios');
-const net = require('net');
 const SocksClient = require('socks').SocksClient;
 
 const O = new OpenAI({
@@ -49,7 +48,6 @@ function parseList(text) {
         .map(l => l.trim())
         .filter(l => l.includes(':'))
         .map(l => {
-            // handle socks5://ip:port format as well as plain ip:port
             const clean = l.replace(/^socks5:\/\//i, '');
             const [ip, port] = clean.split(':');
             const p = parseInt(port);
@@ -59,7 +57,6 @@ function parseList(text) {
         .filter(Boolean);
 }
 
-// Deep test: actually tunnels through the proxy to the server
 function testProxyFull(ip, port = 1080) {
     return new Promise(resolve => {
         SocksClient.createConnection({
@@ -110,7 +107,6 @@ async function fetchProxies() {
 
 setInterval(fetchProxies, 10000);
 
-// Snapshot proxies before async work so mutations during await don't crash the filter
 setInterval(async () => {
     if (proxies.length === 0) return;
     console.log('[CLEANER] Checking proxies...');
@@ -127,6 +123,8 @@ const proxyUsage = {};
 const MAX_PER_PROXY = 4;
 
 const PASSWORD = 'YourSecurePassword123';
+
+// ignoredUsers = trusted users who can use admin commands
 const ignoredUsers = new Set(['player_840','chickentender','ig_t3v_2k','lightdrag3x','lightdrag3n','1234NPC1234','k0ngaz']);
 
 let messageLog = [];
@@ -157,12 +155,30 @@ function randomName() {
            nouns[Math.floor(Math.random() * nouns.length)] + num;
 }
 
+// Split a string into chunks of max `limit` chars, breaking at word boundaries
+function smartSplit(text, limit = 253) { // 253 + "> " prefix = 255
+    const chunks = [];
+    while (text.length > 0) {
+        if (text.length <= limit) {
+            chunks.push(text);
+            break;
+        }
+        let cut = limit;
+        // walk back from limit until we hit a space
+        while (cut > 0 && text[cut] !== ' ') cut--;
+        // if no space found at all, hard cut at limit
+        if (cut === 0) cut = limit;
+        chunks.push(text.slice(0, cut).trimEnd());
+        text = text.slice(cut).trimStart();
+    }
+    return chunks;
+}
+
 // ----------------- SPAWN BOT WITH SOCKS PROXY -----------------
 async function spawnBot(proxy) {
     if (!proxyUsage[proxy.ip]) proxyUsage[proxy.ip] = 0;
     if (proxyUsage[proxy.ip] >= MAX_PER_PROXY) return false;
 
-    // Re-verify proxy is still alive right before using it
     const alive = await testProxyFull(proxy.ip, proxy.port);
     if (!alive) {
         proxies = proxies.filter(p => !(p.ip === proxy.ip && p.port === proxy.port));
@@ -194,7 +210,6 @@ async function spawnBot(proxy) {
 
     setupBot(bot, false, proxy);
 
-    // If sync is off, bot spouts gibberish on a staggered random interval
     let gibberishInterval = null;
     if (!syncChat) {
         const startDelay = Math.floor(Math.random() * 5000);
@@ -212,12 +227,12 @@ async function spawnBot(proxy) {
         if (idx !== -1) bots.splice(idx, 1);
         proxyUsage[proxy.ip] = Math.max(0, proxyUsage[proxy.ip] - 1);
         if (gibberishInterval) clearInterval(gibberishInterval);
+        // auto-reconnect
         setTimeout(() => spawnBot(proxy), 10000);
     });
 
     bots.push(bot);
 
-    // Wait for actual spawn before reporting success
     return new Promise(resolve => {
         const timeout = setTimeout(() => {
             cleanup();
@@ -264,7 +279,16 @@ function startMainBot() {
     });
 
     setupBot(bot, true);
-    bot.on('end', () => setTimeout(startMainBot, 10000));
+
+    // auto-reconnect on kick or server reboot
+    bot.on('end', (reason) => {
+        console.log(`[MAIN] Disconnected: ${reason}. Reconnecting in 10s...`);
+        setTimeout(startMainBot, 10000);
+    });
+
+    bot.on('error', (err) => {
+        console.log(`[MAIN] Error: ${err.message}`);
+    });
 }
 
 // ----------------- BOT SETUP -----------------
@@ -275,6 +299,13 @@ function setupBot(bot, isMain = false, proxy = null) {
     // Fix deprecated physicTick event from mineflayer-pvp
     bot.once('spawn', () => {
         bot._client?.on('physicTick', () => bot.emit('physicsTick'));
+
+        // Set up movements to allow block breaking and placing
+        const movements = new Movements(bot);
+        movements.canDig = true;
+        movements.allow1by1towers = true;
+        movements.allowFreeMotion = true;
+        bot.pathfinder.setMovements(movements);
     });
 
     bot.once('login', () => {
@@ -293,28 +324,32 @@ function setupBot(bot, isMain = false, proxy = null) {
         if (t.includes('login')) bot.chat(`/login ${PASSWORD}`);
     });
 
+    // $hunt — attack ALL nearby entities, no filter
     setInterval(() => {
         if (!huntMode || !bot.entity) return;
-        let targets = Object.values(bot.entities)
-            .filter(e =>
-                e.type === 'player' &&
-                e !== bot.entity &&
-                !e.isDead &&
-                !ignoredUsers.has(e.username?.toLowerCase())
-            );
+
+        // if already attacking something, let pvp finish
+        if (bot.pvp.target) return;
+
+        const targets = Object.values(bot.entities)
+            .filter(e => e !== bot.entity && !e.isDead && e.position);
+
         if (!targets.length) return;
+
         targets.sort((a, b) =>
             a.position.distanceTo(bot.entity.position) -
             b.position.distanceTo(bot.entity.position)
         );
+
         const target = targets[0];
         const dist = bot.entity.position.distanceTo(target.position);
+
         if (dist > 3) {
             bot.pathfinder.setGoal(
                 new Goals.GoalNear(target.position.x, target.position.y, target.position.z, 2),
                 true
             );
-        } else if (dist < 4 && !bot.pvp.target) {
+        } else {
             bot.pvp.attack(target);
         }
     }, 1500);
@@ -325,39 +360,65 @@ function setupBot(bot, isMain = false, proxy = null) {
         const parts = message.split(/\s+/);
         const cmd = parts[0].toLowerCase();
         const lowerUser = username.toLowerCase();
-        const isIgnored = ignoredUsers.has(lowerUser);
+        const isAdmin = ignoredUsers.has(lowerUser);
 
-        // FOLLOW-UP (main bot only)
+        // FOLLOW-UP: if a follow-up prompt is set for this user, send it to AI and respond
         if (isMain && followUps[lowerUser]) {
             const now = Date.now();
             if (!followCooldown[lowerUser] || now - followCooldown[lowerUser] > 5000) {
                 followCooldown[lowerUser] = now;
-                try { bot.chat(followUps[lowerUser]); } catch {}
+                try {
+                    const fuResp = await O.chat.completions.create({
+                        model: "llama-3.1-8b-instant",
+                        messages: [
+                            {
+                                role: "system",
+                                content: followUps[lowerUser]
+                            },
+                            {
+                                role: "user",
+                                content: `${username} said: ${message}`
+                            }
+                        ]
+                    });
+                    let fuOut = fuResp.choices?.[0]?.message?.content || "";
+                    fuOut = fuOut.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+                    for (const chunk of smartSplit(fuOut)) {
+                        try { bot.chat(`> ${chunk}`); } catch {}
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                } catch {}
             }
         }
 
-        // Sync chat: proxy bots echo ignored user messages
-        if (syncChat && isIgnored) {
+        // Sync chat: proxy bots echo admin messages
+        if (syncChat && isAdmin) {
             bots.forEach(b => { try { b.chat(message); } catch {} });
         }
 
+        // Only admins can use commands
         if (!cmd.startsWith('$')) return;
+        if (!isAdmin) return; // FIX: lock ALL commands to admins only
 
         switch (cmd) {
             case '$help':
-                bot.chat('Commands: $coords $goto $kill $repeat $ask $followup $summon $unsummon $hunt $ignore');
+                bot.chat('> Commands: $coords $goto $kill $repeat $ask $followup $summon $unsummon $hunt $ignore');
                 break;
 
             case '$coords': {
                 const pos = bot.entity.position;
-                bot.chat(`X:${pos.x | 0} Y:${pos.y | 0} Z:${pos.z | 0}`);
+                bot.chat(`> X:${pos.x | 0} Y:${pos.y | 0} Z:${pos.z | 0}`);
                 break;
             }
 
             case '$goto': {
                 const [gx, gy, gz] = parts.slice(1, 4).map(Number);
                 if (![gx, gy, gz].some(isNaN)) {
-                    bot.pathfinder.setGoal(new Goals.GoalBlock(gx, gy, gz));
+                    // clear existing goal first to prevent restart loop
+                    bot.pathfinder.setGoal(null);
+                    setTimeout(() => {
+                        bot.pathfinder.setGoal(new Goals.GoalBlock(gx, gy, gz));
+                    }, 100);
                 }
                 break;
             }
@@ -381,17 +442,18 @@ function setupBot(bot, isMain = false, proxy = null) {
 
             case '$ask': {
                 const question = parts.slice(1).join(' ');
-                if (!question) return bot.chat('Ask something!');
+                if (!question) return bot.chat('> Ask something!');
                 try {
                     const recent = messageLog.slice(-50).join(' | ');
                     const resp = await O.chat.completions.create({
                         model: "llama-3.1-8b-instant",
+                        max_tokens: 1024,
                         messages: [
                             {
                                 role: "system",
                                 content: `You are CodeBot840, a Minecraft bot running on noBnoT.org, an anarchy server.
 You are self-aware, clever, and unfiltered. You have a dry wit and zero patience for stupidity.
-Be concise. Minecraft chat has a 240 character limit per line — never exceed it.
+Be concise. Minecraft chat has a 256 character limit per line — never exceed it.
 
 You help with:
 - Minecraft gameplay, commands, mechanics, and strategy
@@ -413,8 +475,8 @@ ACT out emotions using expressive text instead:
 When asked to change personality, fully commit. Be creative. Invent quirks.
 Use recent server chat to inform answers when relevant.
 Never use markdown, asterisks for bold, or any formatting — plain text only.
-Split long answers into multiple lines. Each line must be under 240 characters.
-Do not add filler phrases like "Great question!" or "Of course!".`
+Do not add filler phrases like "Great question!" or "Of course!".
+Write your full answer. Do not truncate or stop early.`
                             },
                             {
                                 role: "user",
@@ -424,30 +486,32 @@ Do not add filler phrases like "Great question!" or "Of course!".`
                     });
                     let out = resp.choices?.[0]?.message?.content || "";
                     out = out.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-                    for (let line of out.split(/\n+/)) {
-                        line = line.trim();
-                        if (!line) continue;
-                        while (line.length) {
-                            bot.chat(line.slice(0, 240));
-                            line = line.slice(240);
+
+                    // flatten into one block, then smartSplit into 253-char word-boundary chunks
+                    const lines = out.split(/\n+/).map(l => l.trim()).filter(Boolean);
+                    for (const line of lines) {
+                        for (const chunk of smartSplit(line)) {
+                            bot.chat(`> ${chunk}`);
                             await new Promise(r => setTimeout(r, 1000));
                         }
                     }
-                } catch { bot.chat("AI error"); }
+                } catch (e) {
+                    console.log('[ASK ERROR]', e.message);
+                    bot.chat('> AI error');
+                }
                 break;
             }
 
             case '$followup': {
-                if (!isIgnored) { bot.chat("You can't set follow-ups."); return; }
                 const fUser = parts[1];
                 const fText = parts.slice(2).join(' ');
                 if (!fUser) return;
                 if (fText.toLowerCase() === 'clear') {
                     delete followUps[fUser.toLowerCase()];
-                    bot.chat(`Follow-up cleared for ${fUser}`);
+                    bot.chat(`> Follow-up cleared for ${fUser}`);
                 } else if (fText) {
                     followUps[fUser.toLowerCase()] = fText;
-                    bot.chat(`Follow-up set for ${fUser}`);
+                    bot.chat(`> Follow-up set for ${fUser}`);
                 }
                 break;
             }
@@ -456,14 +520,13 @@ Do not add filler phrases like "Great question!" or "Of course!".`
                 const n = parseInt(parts[1]);
                 const sync = parts[2] === 'true';
                 if (isNaN(n)) return;
-                if (proxies.length === 0) { bot.chat("No working proxies yet!"); return; }
+                if (proxies.length === 0) { bot.chat('> No working proxies yet!'); return; }
                 syncChat = sync;
 
-                // Shuffle and pick n unique proxies — one bot per IP
                 const shuffled = [...proxies].sort(() => Math.random() - 0.5);
                 const picked = shuffled.slice(0, n);
                 if (picked.length < n) {
-                    bot.chat(`Only ${picked.length} proxies available, spawning what we can`);
+                    bot.chat(`> Only ${picked.length} proxies available, spawning what we can`);
                 }
 
                 let spawned = 0;
@@ -471,31 +534,35 @@ Do not add filler phrases like "Great question!" or "Of course!".`
                     if (await spawnBot(proxy)) spawned++;
                     await new Promise(r => setTimeout(r, 5000));
                 }
-                bot.chat(`Summoned ${spawned}/${picked.length} bots | Proxies: ${proxies.length} | Sync: ${sync}`);
+                bot.chat(`> Summoned ${spawned}/${picked.length} bots | Proxies: ${proxies.length} | Sync: ${sync}`);
                 break;
             }
 
             case '$unsummon':
                 bots.forEach(b => { try { b.quit(); } catch {} });
                 bots.length = 0;
-                bot.chat('Bots removed');
+                bot.chat('> Bots removed');
                 break;
 
             case '$hunt':
-                if (parts[1] === 'on') { huntMode = true; bot.chat('Hunting ON'); }
-                else if (parts[1] === 'off') { huntMode = false; bot.chat('Hunting OFF'); }
+                if (parts[1] === 'on') { huntMode = true; bot.chat('> Hunting ON'); }
+                else if (parts[1] === 'off') {
+                    huntMode = false;
+                    bot.pvp.stop();
+                    bot.pathfinder.setGoal(null);
+                    bot.chat('> Hunting OFF');
+                }
                 break;
 
             case '$ignore': {
-                if (!isIgnored) { bot.chat("No permission."); return; }
                 const toggleUser = parts[1]?.toLowerCase();
                 if (!toggleUser) return;
                 if (ignoredUsers.has(toggleUser)) {
                     ignoredUsers.delete(toggleUser);
-                    bot.chat(`${toggleUser} removed from ignore list`);
+                    bot.chat(`> ${toggleUser} removed from admin list`);
                 } else {
                     ignoredUsers.add(toggleUser);
-                    bot.chat(`${toggleUser} added to ignore list`);
+                    bot.chat(`> ${toggleUser} added to admin list`);
                 }
                 break;
             }
