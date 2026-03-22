@@ -123,17 +123,16 @@ const proxyUsage = {};
 const MAX_PER_PROXY = 4;
 
 const PASSWORD = 'YourSecurePassword123';
-
-// ignoredUsers = trusted users who can use admin commands
 const ignoredUsers = new Set(['player_840','chickentender','ig_t3v_2k','lightdrag3x','lightdrag3n','1234NPC1234','k0ngaz']);
 
 let messageLog = [];
 let huntMode = false;
 let syncChat = false;
+
+// followUps stores { systemPrompt, history } per user
 const followUps = {};
 const followCooldown = {};
 
-// Gibberish generator for non-synced bots
 function randomGibberish() {
     const syllables = [
         'bra','flo','zek','mun','qix','vop','tel','waz','dru','sniv',
@@ -155,18 +154,13 @@ function randomName() {
            nouns[Math.floor(Math.random() * nouns.length)] + num;
 }
 
-// Split a string into chunks of max `limit` chars, breaking at word boundaries
-function smartSplit(text, limit = 253) { // 253 + "> " prefix = 255
+// Split at word boundaries, max 253 chars (leaves room for "> " prefix)
+function smartSplit(text, limit = 253) {
     const chunks = [];
     while (text.length > 0) {
-        if (text.length <= limit) {
-            chunks.push(text);
-            break;
-        }
+        if (text.length <= limit) { chunks.push(text); break; }
         let cut = limit;
-        // walk back from limit until we hit a space
         while (cut > 0 && text[cut] !== ' ') cut--;
-        // if no space found at all, hard cut at limit
         if (cut === 0) cut = limit;
         chunks.push(text.slice(0, cut).trimEnd());
         text = text.slice(cut).trimStart();
@@ -227,7 +221,6 @@ async function spawnBot(proxy) {
         if (idx !== -1) bots.splice(idx, 1);
         proxyUsage[proxy.ip] = Math.max(0, proxyUsage[proxy.ip] - 1);
         if (gibberishInterval) clearInterval(gibberishInterval);
-        // auto-reconnect
         setTimeout(() => spawnBot(proxy), 10000);
     });
 
@@ -247,12 +240,7 @@ async function spawnBot(proxy) {
             bot.removeListener('error', onFail);
         }
 
-        function onSpawn() {
-            cleanup();
-            console.log(`[JOINED] ${bot.username} via ${proxy.ip}`);
-            resolve(true);
-        }
-
+        function onSpawn() { cleanup(); console.log(`[JOINED] ${bot.username} via ${proxy.ip}`); resolve(true); }
         function onFail(err) {
             cleanup();
             if (err) console.log(`[FAIL] ${bot.username} via ${proxy.ip}:`, err.message || err);
@@ -280,7 +268,6 @@ function startMainBot() {
 
     setupBot(bot, true);
 
-    // auto-reconnect on kick or server reboot
     bot.on('end', (reason) => {
         console.log(`[MAIN] Disconnected: ${reason}. Reconnecting in 10s...`);
         setTimeout(startMainBot, 10000);
@@ -289,6 +276,42 @@ function startMainBot() {
     bot.on('error', (err) => {
         console.log(`[MAIN] Error: ${err.message}`);
     });
+
+    // Detect AFK/limbo kick — server sends a specific message or title
+    // Poll position: if bot hasn't moved and isn't spawned on main, force reconnect
+    let lastPos = null;
+    let stuckTicks = 0;
+    setInterval(() => {
+        if (!bot.entity) return;
+        const pos = bot.entity.position;
+        if (lastPos && pos.distanceTo(lastPos) < 0.01) {
+            stuckTicks++;
+            // if stuck for 5 minutes and not in hunt/goto mode, assume limbo
+            if (stuckTicks > 300) {
+                console.log('[MAIN] Detected possible limbo/AFK server. Forcing reconnect...');
+                stuckTicks = 0;
+                try { bot.quit(); } catch {}
+            }
+        } else {
+            stuckTicks = 0;
+        }
+        lastPos = pos.clone();
+    }, 1000);
+
+    // Also watch for chat messages that indicate a limbo/AFK server
+    bot.on('messagestr', msg => {
+        const t = msg.toLowerCase();
+        if (
+            t.includes('lost connection') ||
+            t.includes('timed out') ||
+            t.includes('afk') && t.includes('kick') ||
+            t.includes('you are now in') ||
+            t.includes('limbo')
+        ) {
+            console.log('[MAIN] Limbo/kick message detected. Reconnecting...');
+            setTimeout(() => { try { bot.quit(); } catch {} }, 3000);
+        }
+    });
 }
 
 // ----------------- BOT SETUP -----------------
@@ -296,15 +319,14 @@ function setupBot(bot, isMain = false, proxy = null) {
     bot.loadPlugin(Pathfinder);
     bot.loadPlugin(pvp);
 
-    // Fix deprecated physicTick event from mineflayer-pvp
     bot.once('spawn', () => {
         bot._client?.on('physicTick', () => bot.emit('physicsTick'));
 
-        // Set up movements to allow block breaking and placing
         const movements = new Movements(bot);
         movements.canDig = true;
         movements.allow1by1towers = true;
         movements.allowFreeMotion = true;
+        movements.allowParkour = true;
         bot.pathfinder.setMovements(movements);
     });
 
@@ -324,11 +346,9 @@ function setupBot(bot, isMain = false, proxy = null) {
         if (t.includes('login')) bot.chat(`/login ${PASSWORD}`);
     });
 
-    // $hunt — attack ALL nearby entities, no filter
+    // $hunt — attack ALL nearby entities, no exceptions
     setInterval(() => {
         if (!huntMode || !bot.entity) return;
-
-        // if already attacking something, let pvp finish
         if (bot.pvp.target) return;
 
         const targets = Object.values(bot.entities)
@@ -362,43 +382,51 @@ function setupBot(bot, isMain = false, proxy = null) {
         const lowerUser = username.toLowerCase();
         const isAdmin = ignoredUsers.has(lowerUser);
 
-        // FOLLOW-UP: if a follow-up prompt is set for this user, send it to AI and respond
+        // FOLLOW-UP: AI responds based on stored system prompt + full conversation history
         if (isMain && followUps[lowerUser]) {
             const now = Date.now();
             if (!followCooldown[lowerUser] || now - followCooldown[lowerUser] > 5000) {
                 followCooldown[lowerUser] = now;
                 try {
+                    const fu = followUps[lowerUser];
+
+                    // append user message to history
+                    fu.history.push({ role: 'user', content: `${username}: ${message}` });
+
                     const fuResp = await O.chat.completions.create({
                         model: "llama-3.1-8b-instant",
+                        max_tokens: 512,
                         messages: [
-                            {
-                                role: "system",
-                                content: followUps[lowerUser]
-                            },
-                            {
-                                role: "user",
-                                content: `${username} said: ${message}`
-                            }
+                            { role: 'system', content: fu.systemPrompt },
+                            ...fu.history
                         ]
                     });
-                    let fuOut = fuResp.choices?.[0]?.message?.content || "";
-                    fuOut = fuOut.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-                    for (const chunk of smartSplit(fuOut)) {
-                        try { bot.chat(`> ${chunk}`); } catch {}
-                        await new Promise(r => setTimeout(r, 1000));
+
+                    const fuOut = (fuResp.choices?.[0]?.message?.content || "")
+                        .replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+
+                    // append assistant response to history, keep last 20 turns
+                    fu.history.push({ role: 'assistant', content: fuOut });
+                    if (fu.history.length > 40) fu.history.splice(0, 2);
+
+                    for (const line of fuOut.split(/\n+/).map(l => l.trim()).filter(Boolean)) {
+                        for (const chunk of smartSplit(line)) {
+                            try { bot.chat(`> ${chunk}`); } catch {}
+                            await new Promise(r => setTimeout(r, 1000));
+                        }
                     }
-                } catch {}
+                } catch (e) {
+                    console.log('[FOLLOWUP ERROR]', e.message);
+                }
             }
         }
 
-        // Sync chat: proxy bots echo admin messages
         if (syncChat && isAdmin) {
             bots.forEach(b => { try { b.chat(message); } catch {} });
         }
 
-        // Only admins can use commands
         if (!cmd.startsWith('$')) return;
-        if (!isAdmin) return; // FIX: lock ALL commands to admins only
+        if (!isAdmin) return;
 
         switch (cmd) {
             case '$help':
@@ -413,13 +441,34 @@ function setupBot(bot, isMain = false, proxy = null) {
 
             case '$goto': {
                 const [gx, gy, gz] = parts.slice(1, 4).map(Number);
-                if (![gx, gy, gz].some(isNaN)) {
-                    // clear existing goal first to prevent restart loop
-                    bot.pathfinder.setGoal(null);
-                    setTimeout(() => {
-                        bot.pathfinder.setGoal(new Goals.GoalBlock(gx, gy, gz));
-                    }, 100);
-                }
+                if ([gx, gy, gz].some(isNaN)) break;
+
+                bot.pathfinder.setGoal(null);
+
+                const goal = new Goals.GoalBlock(gx, gy, gz);
+
+                bot.pathfinder.setGoal(goal);
+
+                // watch for pathfinder getting stuck and retry
+                let lastDist = Infinity;
+                let stuckCount = 0;
+                const stuckCheck = setInterval(() => {
+                    if (!bot.entity) { clearInterval(stuckCheck); return; }
+                    const dist = bot.entity.position.distanceTo({ x: gx, y: gy, z: gz });
+                    if (dist < 2) { clearInterval(stuckCheck); return; }
+                    if (Math.abs(dist - lastDist) < 0.5) {
+                        stuckCount++;
+                        if (stuckCount >= 5) {
+                            stuckCount = 0;
+                            // re-set goal to retry pathing
+                            bot.pathfinder.setGoal(null);
+                            setTimeout(() => bot.pathfinder.setGoal(goal), 500);
+                        }
+                    } else {
+                        stuckCount = 0;
+                    }
+                    lastDist = dist;
+                }, 2000);
                 break;
             }
 
@@ -487,9 +536,7 @@ Write your full answer. Do not truncate or stop early.`
                     let out = resp.choices?.[0]?.message?.content || "";
                     out = out.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
-                    // flatten into one block, then smartSplit into 253-char word-boundary chunks
-                    const lines = out.split(/\n+/).map(l => l.trim()).filter(Boolean);
-                    for (const line of lines) {
+                    for (const line of out.split(/\n+/).map(l => l.trim()).filter(Boolean)) {
                         for (const chunk of smartSplit(line)) {
                             bot.chat(`> ${chunk}`);
                             await new Promise(r => setTimeout(r, 1000));
@@ -503,14 +550,15 @@ Write your full answer. Do not truncate or stop early.`
             }
 
             case '$followup': {
-                const fUser = parts[1];
+                const fUser = parts[1]?.toLowerCase();
                 const fText = parts.slice(2).join(' ');
                 if (!fUser) return;
                 if (fText.toLowerCase() === 'clear') {
-                    delete followUps[fUser.toLowerCase()];
+                    delete followUps[fUser];
                     bot.chat(`> Follow-up cleared for ${fUser}`);
                 } else if (fText) {
-                    followUps[fUser.toLowerCase()] = fText;
+                    // store system prompt and start fresh history
+                    followUps[fUser] = { systemPrompt: fText, history: [] };
                     bot.chat(`> Follow-up set for ${fUser}`);
                 }
                 break;
@@ -548,7 +596,7 @@ Write your full answer. Do not truncate or stop early.`
                 if (parts[1] === 'on') { huntMode = true; bot.chat('> Hunting ON'); }
                 else if (parts[1] === 'off') {
                     huntMode = false;
-                    bot.pvp.stop();
+                    try { bot.pvp.stop(); } catch {}
                     bot.pathfinder.setGoal(null);
                     bot.chat('> Hunting OFF');
                 }
