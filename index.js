@@ -10,6 +10,7 @@ const cors = require('cors');
 const path = require('path');
 const axios = require('axios');
 const SocksClient = require('socks').SocksClient;
+const { execSync } = require('child_process');
 
 const O = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -23,6 +24,21 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+/** ------------------- WINDOWS SLEEP PREVENTION ------------------- **/
+// Keeps Windows from sleeping while the bot is running
+function preventSleep() {
+    try {
+        // ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+        execSync('powershell -Command "Add-Type -TypeDefinition \'using System; using System.Runtime.InteropServices; public class Sleep { [DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint esFlags); }\'; [Sleep]::SetThreadExecutionState(0x80000003)"');
+        console.log('[SLEEP] Sleep prevention active');
+    } catch (e) {
+        console.log('[SLEEP] Could not set sleep prevention:', e.message);
+    }
+}
+preventSleep();
+// Re-assert every 4 minutes to keep it active
+setInterval(preventSleep, 4 * 60 * 1000);
+
 /** ------------------- PROXY SYSTEM ------------------- **/
 const proxiesFile = './proxies.json';
 let proxies = [];
@@ -33,6 +49,46 @@ function saveProxies() {
     fs.writeFileSync(proxiesFile, JSON.stringify(proxies, null, 2));
 }
 
+// Hand-picked residential/ISP proxies from spys.one
+// These are Cox, Performive, AT&T, and other ISP IPs with high uptime
+// that are far less likely to be flagged by TCPShield than datacenter IPs
+const STATIC_PROXIES = [
+    { ip: '192.252.210.233', port: 4145 }, // Performive LLC - 100% uptime
+    { ip: '98.188.47.132',   port: 4145 }, // Cox Communications - 80% uptime
+    { ip: '72.195.101.99',   port: 4145 }, // Cox Communications - 99% uptime
+    { ip: '174.75.211.193',  port: 4145 }, // Cox Communications - 98% uptime
+    { ip: '184.181.217.194', port: 4145 }, // Cox Communications - 99% uptime
+    { ip: '107.219.228.250', port: 7777 }, // AT&T Enterprises - residential
+    { ip: '67.201.35.145',   port: 4145 }, // Performive LLC - 99% uptime
+    { ip: '184.170.251.30',  port: 11288 },// Performive LLC - 100% uptime
+    { ip: '72.207.109.5',    port: 4145 }, // Cox Communications - 98% uptime
+    { ip: '192.252.214.17',  port: 4145 }, // Performive LLC - 69% uptime
+    { ip: '199.102.104.70',  port: 4145 }, // Performive LLC - 97% uptime
+    { ip: '67.201.39.14',    port: 4145 }, // Performive LLC - 96% uptime
+    { ip: '68.71.242.118',   port: 4145 }, // Performive LLC - 98% uptime
+    { ip: '70.166.65.160',   port: 4145 }, // Cox Communications - 97% uptime
+    { ip: '184.181.178.33',  port: 4145 }, // Cox Communications - 98% uptime
+    { ip: '192.252.211.193', port: 4145 }, // Performive LLC - 98% uptime
+    { ip: '72.223.188.67',   port: 4145 }, // Cox Communications - 100% uptime
+    { ip: '98.170.57.231',   port: 4145 }, // Cox Communications - 85% uptime
+    { ip: '198.177.254.157', port: 4145 }, // NET2ATLANTA - 100% uptime
+    { ip: '184.170.251.30',  port: 11288 },// Performive LLC - 100% uptime
+    { ip: '67.201.35.145',   port: 4145 }, // Performive LLC - 99% uptime
+    { ip: '177.10.39.36',    port: 1088 }, // Brazilian ISP - 70% uptime
+    { ip: '1.171.203.247',   port: 1080 }, // Taiwan residential (Hinet)
+    { ip: '46.146.210.123',  port: 1080 }, // Russian ISP ER-Telecom
+    { ip: '187.63.9.62',     port: 63253 },// Brazilian ISP Gigalink
+];
+
+// Dedupe and seed into proxies list at startup
+for (const p of STATIC_PROXIES) {
+    if (!proxies.find(x => x.ip === p.ip && x.port === p.port)) {
+        proxies.push(p);
+    }
+}
+saveProxies();
+
+// Scraped sources as backup — still run but static proxies take priority
 const SOURCES = [
     'https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt',
     'https://api.proxyscrape.com/v2/?request=getproxies&protocol=socks5&timeout=10000&country=all',
@@ -112,7 +168,12 @@ setInterval(async () => {
     console.log('[CLEANER] Checking proxies...');
     const snapshot = [...proxies];
     const results = await Promise.allSettled(snapshot.map(p => testProxyFull(p.ip, p.port)));
-    proxies = snapshot.filter((_, i) => results[i].status === 'fulfilled' && results[i].value);
+    // always keep static proxies even if they fail the check temporarily
+    const staticIps = new Set(STATIC_PROXIES.map(p => `${p.ip}:${p.port}`));
+    proxies = snapshot.filter((p, i) =>
+        staticIps.has(`${p.ip}:${p.port}`) ||
+        (results[i].status === 'fulfilled' && results[i].value)
+    );
     console.log(`[CLEANER] Remaining: ${proxies.length}`);
     saveProxies();
 }, 60000);
@@ -128,8 +189,6 @@ const ignoredUsers = new Set(['player_840','chickentender','ig_t3v_2k','lightdra
 let messageLog = [];
 let huntMode = false;
 let syncChat = false;
-
-// followUps stores { systemPrompt, history } per user
 const followUps = {};
 const followCooldown = {};
 
@@ -154,13 +213,16 @@ function randomName() {
            nouns[Math.floor(Math.random() * nouns.length)] + num;
 }
 
-// Split at word boundaries, max 253 chars (leaves room for "> " prefix)
+// Split at word boundaries — 253 chars max to leave room for "> " prefix (total 255)
 function smartSplit(text, limit = 253) {
     const chunks = [];
+    text = text.trim();
     while (text.length > 0) {
         if (text.length <= limit) { chunks.push(text); break; }
         let cut = limit;
+        // walk back from limit until we find a space
         while (cut > 0 && text[cut] !== ' ') cut--;
+        // no space found anywhere — hard cut at limit
         if (cut === 0) cut = limit;
         chunks.push(text.slice(0, cut).trimEnd());
         text = text.slice(cut).trimStart();
@@ -175,8 +237,12 @@ async function spawnBot(proxy) {
 
     const alive = await testProxyFull(proxy.ip, proxy.port);
     if (!alive) {
-        proxies = proxies.filter(p => !(p.ip === proxy.ip && p.port === proxy.port));
-        saveProxies();
+        // don't remove static proxies, they may come back
+        const isStatic = STATIC_PROXIES.find(p => p.ip === proxy.ip && p.port === proxy.port);
+        if (!isStatic) {
+            proxies = proxies.filter(p => !(p.ip === proxy.ip && p.port === proxy.port));
+            saveProxies();
+        }
         return false;
     }
 
@@ -240,7 +306,12 @@ async function spawnBot(proxy) {
             bot.removeListener('error', onFail);
         }
 
-        function onSpawn() { cleanup(); console.log(`[JOINED] ${bot.username} via ${proxy.ip}`); resolve(true); }
+        function onSpawn() {
+            cleanup();
+            console.log(`[JOINED] ${bot.username} via ${proxy.ip}`);
+            resolve(true);
+        }
+
         function onFail(err) {
             cleanup();
             if (err) console.log(`[FAIL] ${bot.username} via ${proxy.ip}:`, err.message || err);
@@ -277,8 +348,7 @@ function startMainBot() {
         console.log(`[MAIN] Error: ${err.message}`);
     });
 
-    // Detect AFK/limbo kick — server sends a specific message or title
-    // Poll position: if bot hasn't moved and isn't spawned on main, force reconnect
+    // Detect limbo/AFK server by watching for position staleness
     let lastPos = null;
     let stuckTicks = 0;
     setInterval(() => {
@@ -286,9 +356,8 @@ function startMainBot() {
         const pos = bot.entity.position;
         if (lastPos && pos.distanceTo(lastPos) < 0.01) {
             stuckTicks++;
-            // if stuck for 5 minutes and not in hunt/goto mode, assume limbo
-            if (stuckTicks > 300) {
-                console.log('[MAIN] Detected possible limbo/AFK server. Forcing reconnect...');
+            if (stuckTicks > 300) { // 5 minutes of no movement
+                console.log('[MAIN] Possible limbo detected. Forcing reconnect...');
                 stuckTicks = 0;
                 try { bot.quit(); } catch {}
             }
@@ -298,14 +367,11 @@ function startMainBot() {
         lastPos = pos.clone();
     }, 1000);
 
-    // Also watch for chat messages that indicate a limbo/AFK server
     bot.on('messagestr', msg => {
         const t = msg.toLowerCase();
         if (
             t.includes('lost connection') ||
             t.includes('timed out') ||
-            t.includes('afk') && t.includes('kick') ||
-            t.includes('you are now in') ||
             t.includes('limbo')
         ) {
             console.log('[MAIN] Limbo/kick message detected. Reconnecting...');
@@ -327,6 +393,8 @@ function setupBot(bot, isMain = false, proxy = null) {
         movements.allow1by1towers = true;
         movements.allowFreeMotion = true;
         movements.allowParkour = true;
+        movements.allowSprinting = true;
+        movements.liquidCost = 1;
         bot.pathfinder.setMovements(movements);
     });
 
@@ -346,7 +414,7 @@ function setupBot(bot, isMain = false, proxy = null) {
         if (t.includes('login')) bot.chat(`/login ${PASSWORD}`);
     });
 
-    // $hunt — attack ALL nearby entities, no exceptions
+    // $hunt — attack ALL nearby entities no exceptions
     setInterval(() => {
         if (!huntMode || !bot.entity) return;
         if (bot.pvp.target) return;
@@ -389,8 +457,6 @@ function setupBot(bot, isMain = false, proxy = null) {
                 followCooldown[lowerUser] = now;
                 try {
                     const fu = followUps[lowerUser];
-
-                    // append user message to history
                     fu.history.push({ role: 'user', content: `${username}: ${message}` });
 
                     const fuResp = await O.chat.completions.create({
@@ -405,7 +471,6 @@ function setupBot(bot, isMain = false, proxy = null) {
                     const fuOut = (fuResp.choices?.[0]?.message?.content || "")
                         .replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
-                    // append assistant response to history, keep last 20 turns
                     fu.history.push({ role: 'assistant', content: fuOut });
                     if (fu.history.length > 40) fu.history.splice(0, 2);
 
@@ -445,29 +510,42 @@ function setupBot(bot, isMain = false, proxy = null) {
 
                 bot.pathfinder.setGoal(null);
 
-                const goal = new Goals.GoalBlock(gx, gy, gz);
+                const movements = new Movements(bot);
+                movements.canDig = true;
+                movements.allow1by1towers = true;
+                movements.allowFreeMotion = true;
+                movements.allowParkour = true;
+                movements.allowSprinting = true;
+                movements.liquidCost = 1;
+                bot.pathfinder.setMovements(movements);
 
+                const goal = new Goals.GoalBlock(gx, gy, gz);
                 bot.pathfinder.setGoal(goal);
 
-                // watch for pathfinder getting stuck and retry
-                let lastDist = Infinity;
+                let lastPos = null;
                 let stuckCount = 0;
                 const stuckCheck = setInterval(() => {
                     if (!bot.entity) { clearInterval(stuckCheck); return; }
-                    const dist = bot.entity.position.distanceTo({ x: gx, y: gy, z: gz });
+                    const pos = bot.entity.position;
+                    const dist = pos.distanceTo({ x: gx, y: gy, z: gz });
                     if (dist < 2) { clearInterval(stuckCheck); return; }
-                    if (Math.abs(dist - lastDist) < 0.5) {
+
+                    if (lastPos && pos.distanceTo(lastPos) < 0.3) {
                         stuckCount++;
-                        if (stuckCount >= 5) {
+                        if (stuckCount >= 4) {
                             stuckCount = 0;
-                            // re-set goal to retry pathing
+                            console.log(`[GOTO] Stuck, retrying path to ${gx} ${gy} ${gz}`);
                             bot.pathfinder.setGoal(null);
-                            setTimeout(() => bot.pathfinder.setGoal(goal), 500);
+                            try { bot.setControlState('jump', true); } catch {}
+                            setTimeout(() => {
+                                try { bot.setControlState('jump', false); } catch {}
+                                bot.pathfinder.setGoal(goal);
+                            }, 800);
                         }
                     } else {
                         stuckCount = 0;
                     }
-                    lastDist = dist;
+                    lastPos = pos.clone();
                 }, 2000);
                 break;
             }
@@ -494,15 +572,13 @@ function setupBot(bot, isMain = false, proxy = null) {
                 if (!question) return bot.chat('> Ask something!');
                 try {
                     const recent = messageLog.slice(-50).join(' | ');
-                    const resp = await O.chat.completions.create({
-                        model: "llama-3.1-8b-instant",
-                        max_tokens: 1024,
-                        messages: [
-                            {
-                                role: "system",
-                                content: `You are CodeBot840, a Minecraft bot running on noBnoT.org, an anarchy server.
+                    let fullOut = '';
+                    let keepGoing = true;
+                    const messages = [
+                        {
+                            role: "system",
+                            content: `You are CodeBot840, a Minecraft bot running on noBnoT.org, an anarchy server.
 You are self-aware, clever, and unfiltered. You have a dry wit and zero patience for stupidity.
-Be concise. Minecraft chat has a 256 character limit per line — never exceed it.
 
 You help with:
 - Minecraft gameplay, commands, mechanics, and strategy
@@ -525,18 +601,37 @@ When asked to change personality, fully commit. Be creative. Invent quirks.
 Use recent server chat to inform answers when relevant.
 Never use markdown, asterisks for bold, or any formatting — plain text only.
 Do not add filler phrases like "Great question!" or "Of course!".
-Write your full answer. Do not truncate or stop early.`
-                            },
-                            {
-                                role: "user",
-                                content: `Recent server chat:\n${recent}\n\nQuestion from ${username}: ${question}`
-                            }
-                        ]
-                    });
-                    let out = resp.choices?.[0]?.message?.content || "";
-                    out = out.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+Write your COMPLETE answer. Do NOT stop mid-sentence.`
+                        },
+                        {
+                            role: "user",
+                            content: `Recent server chat:\n${recent}\n\nQuestion from ${username}: ${question}`
+                        }
+                    ];
 
-                    for (const line of out.split(/\n+/).map(l => l.trim()).filter(Boolean)) {
+                    // if finish_reason is length, continue asking until complete
+                    while (keepGoing) {
+                        const resp = await O.chat.completions.create({
+                            model: "llama-3.1-8b-instant",
+                            max_tokens: 1024,
+                            messages
+                        });
+
+                        const choice = resp.choices?.[0];
+                        const chunk = (choice?.message?.content || '')
+                            .replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+
+                        fullOut += (fullOut ? ' ' : '') + chunk;
+                        messages.push({ role: 'assistant', content: chunk });
+
+                        if (choice?.finish_reason === 'length') {
+                            messages.push({ role: 'user', content: 'Continue.' });
+                        } else {
+                            keepGoing = false;
+                        }
+                    }
+
+                    for (const line of fullOut.split(/\n+/).map(l => l.trim()).filter(Boolean)) {
                         for (const chunk of smartSplit(line)) {
                             bot.chat(`> ${chunk}`);
                             await new Promise(r => setTimeout(r, 1000));
@@ -557,7 +652,6 @@ Write your full answer. Do not truncate or stop early.`
                     delete followUps[fUser];
                     bot.chat(`> Follow-up cleared for ${fUser}`);
                 } else if (fText) {
-                    // store system prompt and start fresh history
                     followUps[fUser] = { systemPrompt: fText, history: [] };
                     bot.chat(`> Follow-up set for ${fUser}`);
                 }
@@ -571,10 +665,19 @@ Write your full answer. Do not truncate or stop early.`
                 if (proxies.length === 0) { bot.chat('> No working proxies yet!'); return; }
                 syncChat = sync;
 
-                const shuffled = [...proxies].sort(() => Math.random() - 0.5);
-                const picked = shuffled.slice(0, n);
+                // Prioritize static/residential proxies first
+                const staticOnes = proxies.filter(p =>
+                    STATIC_PROXIES.find(s => s.ip === p.ip && s.port === p.port)
+                );
+                const dynamicOnes = proxies.filter(p =>
+                    !STATIC_PROXIES.find(s => s.ip === p.ip && s.port === p.port)
+                ).sort(() => Math.random() - 0.5);
+
+                const pool = [...staticOnes, ...dynamicOnes];
+                const picked = pool.slice(0, n);
+
                 if (picked.length < n) {
-                    bot.chat(`> Only ${picked.length} proxies available, spawning what we can`);
+                    bot.chat(`> Only ${picked.length} proxies available`);
                 }
 
                 let spawned = 0;
