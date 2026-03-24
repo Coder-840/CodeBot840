@@ -25,10 +25,8 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 /** ------------------- WINDOWS SLEEP PREVENTION ------------------- **/
-// Keeps Windows from sleeping while the bot is running
 function preventSleep() {
     try {
-        // ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
         execSync('powershell -Command "Add-Type -TypeDefinition \'using System; using System.Runtime.InteropServices; public class Sleep { [DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint esFlags); }\'; [Sleep]::SetThreadExecutionState(0x80000003)"');
         console.log('[SLEEP] Sleep prevention active');
     } catch (e) {
@@ -36,7 +34,6 @@ function preventSleep() {
     }
 }
 preventSleep();
-// Re-assert every 4 minutes to keep it active
 setInterval(preventSleep, 4 * 60 * 1000);
 
 /** ------------------- PROXY SYSTEM ------------------- **/
@@ -50,37 +47,34 @@ function saveProxies() {
 }
 
 // Hand-picked residential/ISP proxies from spys.one
-// These are Cox, Performive, AT&T, and other ISP IPs with high uptime
-// that are far less likely to be flagged by TCPShield than datacenter IPs
+// High-uptime Cox, Performive, AT&T, and other ISP IPs
 const STATIC_PROXIES = [
-    { ip: '192.252.210.233', port: 4145 }, // Performive LLC - 100% uptime
-    { ip: '98.188.47.132',   port: 4145 }, // Cox Communications - 80% uptime
-    { ip: '72.195.101.99',   port: 4145 }, // Cox Communications - 99% uptime
-    { ip: '174.75.211.193',  port: 4145 }, // Cox Communications - 98% uptime
-    { ip: '184.181.217.194', port: 4145 }, // Cox Communications - 99% uptime
-    { ip: '107.219.228.250', port: 7777 }, // AT&T Enterprises - residential
-    { ip: '67.201.35.145',   port: 4145 }, // Performive LLC - 99% uptime
-    { ip: '184.170.251.30',  port: 11288 },// Performive LLC - 100% uptime
-    { ip: '72.207.109.5',    port: 4145 }, // Cox Communications - 98% uptime
-    { ip: '192.252.214.17',  port: 4145 }, // Performive LLC - 69% uptime
-    { ip: '199.102.104.70',  port: 4145 }, // Performive LLC - 97% uptime
-    { ip: '67.201.39.14',    port: 4145 }, // Performive LLC - 96% uptime
-    { ip: '68.71.242.118',   port: 4145 }, // Performive LLC - 98% uptime
-    { ip: '70.166.65.160',   port: 4145 }, // Cox Communications - 97% uptime
-    { ip: '184.181.178.33',  port: 4145 }, // Cox Communications - 98% uptime
-    { ip: '192.252.211.193', port: 4145 }, // Performive LLC - 98% uptime
-    { ip: '72.223.188.67',   port: 4145 }, // Cox Communications - 100% uptime
-    { ip: '98.170.57.231',   port: 4145 }, // Cox Communications - 85% uptime
-    { ip: '198.177.254.157', port: 4145 }, // NET2ATLANTA - 100% uptime
-    { ip: '184.170.251.30',  port: 11288 },// Performive LLC - 100% uptime
-    { ip: '67.201.35.145',   port: 4145 }, // Performive LLC - 99% uptime
-    { ip: '177.10.39.36',    port: 1088 }, // Brazilian ISP - 70% uptime
-    { ip: '1.171.203.247',   port: 1080 }, // Taiwan residential (Hinet)
-    { ip: '46.146.210.123',  port: 1080 }, // Russian ISP ER-Telecom
-    { ip: '187.63.9.62',     port: 63253 },// Brazilian ISP Gigalink
+    { ip: '192.252.210.233', port: 4145 },
+    { ip: '98.188.47.132',   port: 4145 },
+    { ip: '72.195.101.99',   port: 4145 },
+    { ip: '174.75.211.193',  port: 4145 },
+    { ip: '184.181.217.194', port: 4145 },
+    { ip: '107.219.228.250', port: 7777 },
+    { ip: '67.201.35.145',   port: 4145 },
+    { ip: '184.170.251.30',  port: 11288 },
+    { ip: '72.207.109.5',    port: 4145 },
+    { ip: '192.252.214.17',  port: 4145 },
+    { ip: '199.102.104.70',  port: 4145 },
+    { ip: '67.201.39.14',    port: 4145 },
+    { ip: '68.71.242.118',   port: 4145 },
+    { ip: '70.166.65.160',   port: 4145 },
+    { ip: '184.181.178.33',  port: 4145 },
+    { ip: '192.252.211.193', port: 4145 },
+    { ip: '72.223.188.67',   port: 4145 },
+    { ip: '98.170.57.231',   port: 4145 },
+    { ip: '198.177.254.157', port: 4145 },
+    { ip: '1.171.203.247',   port: 1080 },
+    { ip: '46.146.210.123',  port: 1080 },
+    { ip: '177.10.39.36',    port: 1088 },
+    { ip: '187.63.9.62',     port: 63253 },
 ];
 
-// Dedupe and seed into proxies list at startup
+// Seed static proxies into pool at startup
 for (const p of STATIC_PROXIES) {
     if (!proxies.find(x => x.ip === p.ip && x.port === p.port)) {
         proxies.push(p);
@@ -88,7 +82,6 @@ for (const p of STATIC_PROXIES) {
 }
 saveProxies();
 
-// Scraped sources as backup — still run but static proxies take priority
 const SOURCES = [
     'https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt',
     'https://api.proxyscrape.com/v2/?request=getproxies&protocol=socks5&timeout=10000&country=all',
@@ -168,10 +161,10 @@ setInterval(async () => {
     console.log('[CLEANER] Checking proxies...');
     const snapshot = [...proxies];
     const results = await Promise.allSettled(snapshot.map(p => testProxyFull(p.ip, p.port)));
-    // always keep static proxies even if they fail the check temporarily
-    const staticIps = new Set(STATIC_PROXIES.map(p => `${p.ip}:${p.port}`));
+    const staticSet = new Set(STATIC_PROXIES.map(p => `${p.ip}:${p.port}`));
+    // never remove static proxies even if they fail temporarily
     proxies = snapshot.filter((p, i) =>
-        staticIps.has(`${p.ip}:${p.port}`) ||
+        staticSet.has(`${p.ip}:${p.port}`) ||
         (results[i].status === 'fulfilled' && results[i].value)
     );
     console.log(`[CLEANER] Remaining: ${proxies.length}`);
@@ -213,16 +206,14 @@ function randomName() {
            nouns[Math.floor(Math.random() * nouns.length)] + num;
 }
 
-// Split at word boundaries — 253 chars max to leave room for "> " prefix (total 255)
+// Split at word boundaries — 253 chars max to leave room for "> " prefix
 function smartSplit(text, limit = 253) {
     const chunks = [];
     text = text.trim();
     while (text.length > 0) {
         if (text.length <= limit) { chunks.push(text); break; }
         let cut = limit;
-        // walk back from limit until we find a space
         while (cut > 0 && text[cut] !== ' ') cut--;
-        // no space found anywhere — hard cut at limit
         if (cut === 0) cut = limit;
         chunks.push(text.slice(0, cut).trimEnd());
         text = text.slice(cut).trimStart();
@@ -237,7 +228,6 @@ async function spawnBot(proxy) {
 
     const alive = await testProxyFull(proxy.ip, proxy.port);
     if (!alive) {
-        // don't remove static proxies, they may come back
         const isStatic = STATIC_PROXIES.find(p => p.ip === proxy.ip && p.port === proxy.port);
         if (!isStatic) {
             proxies = proxies.filter(p => !(p.ip === proxy.ip && p.port === proxy.port));
@@ -356,7 +346,7 @@ function startMainBot() {
         const pos = bot.entity.position;
         if (lastPos && pos.distanceTo(lastPos) < 0.01) {
             stuckTicks++;
-            if (stuckTicks > 300) { // 5 minutes of no movement
+            if (stuckTicks > 300) {
                 console.log('[MAIN] Possible limbo detected. Forcing reconnect...');
                 stuckTicks = 0;
                 try { bot.quit(); } catch {}
@@ -369,11 +359,7 @@ function startMainBot() {
 
     bot.on('messagestr', msg => {
         const t = msg.toLowerCase();
-        if (
-            t.includes('lost connection') ||
-            t.includes('timed out') ||
-            t.includes('limbo')
-        ) {
+        if (t.includes('lost connection') || t.includes('timed out') || t.includes('limbo')) {
             console.log('[MAIN] Limbo/kick message detected. Reconnecting...');
             setTimeout(() => { try { bot.quit(); } catch {} }, 3000);
         }
@@ -414,7 +400,7 @@ function setupBot(bot, isMain = false, proxy = null) {
         if (t.includes('login')) bot.chat(`/login ${PASSWORD}`);
     });
 
-    // $hunt — attack ALL nearby entities no exceptions
+    // $hunt — attack ALL nearby entities, no exceptions
     setInterval(() => {
         if (!huntMode || !bot.entity) return;
         if (bot.pvp.target) return;
@@ -450,7 +436,7 @@ function setupBot(bot, isMain = false, proxy = null) {
         const lowerUser = username.toLowerCase();
         const isAdmin = ignoredUsers.has(lowerUser);
 
-        // FOLLOW-UP: AI responds based on stored system prompt + full conversation history
+        // FOLLOW-UP: AI responds using stored system prompt + full conversation history
         if (isMain && followUps[lowerUser]) {
             const now = Date.now();
             if (!followCooldown[lowerUser] || now - followCooldown[lowerUser] > 5000) {
@@ -522,7 +508,7 @@ function setupBot(bot, isMain = false, proxy = null) {
                 const goal = new Goals.GoalBlock(gx, gy, gz);
                 bot.pathfinder.setGoal(goal);
 
-                let lastPos = null;
+                let lastGotoPos = null;
                 let stuckCount = 0;
                 const stuckCheck = setInterval(() => {
                     if (!bot.entity) { clearInterval(stuckCheck); return; }
@@ -530,7 +516,7 @@ function setupBot(bot, isMain = false, proxy = null) {
                     const dist = pos.distanceTo({ x: gx, y: gy, z: gz });
                     if (dist < 2) { clearInterval(stuckCheck); return; }
 
-                    if (lastPos && pos.distanceTo(lastPos) < 0.3) {
+                    if (lastGotoPos && pos.distanceTo(lastGotoPos) < 0.3) {
                         stuckCount++;
                         if (stuckCount >= 4) {
                             stuckCount = 0;
@@ -545,7 +531,7 @@ function setupBot(bot, isMain = false, proxy = null) {
                     } else {
                         stuckCount = 0;
                     }
-                    lastPos = pos.clone();
+                    lastGotoPos = pos.clone();
                 }, 2000);
                 break;
             }
@@ -609,7 +595,7 @@ Write your COMPLETE answer. Do NOT stop mid-sentence.`
                         }
                     ];
 
-                    // if finish_reason is length, continue asking until complete
+                    // collect full response, continuing if model hit token limit
                     while (keepGoing) {
                         const resp = await O.chat.completions.create({
                             model: "llama-3.1-8b-instant",
@@ -621,19 +607,26 @@ Write your COMPLETE answer. Do NOT stop mid-sentence.`
                         const chunk = (choice?.message?.content || '')
                             .replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
-                        fullOut += (fullOut ? ' ' : '') + chunk;
+                        // join with newline to preserve paragraph structure
+                        fullOut += (fullOut ? '\n' : '') + chunk;
                         messages.push({ role: 'assistant', content: chunk });
 
                         if (choice?.finish_reason === 'length') {
-                            messages.push({ role: 'user', content: 'Continue.' });
+                            messages.push({ role: 'user', content: 'Continue from exactly where you left off, no overlap.' });
                         } else {
                             keepGoing = false;
                         }
                     }
 
-                    for (const line of fullOut.split(/\n+/).map(l => l.trim()).filter(Boolean)) {
-                        for (const chunk of smartSplit(line)) {
-                            bot.chat(`> ${chunk}`);
+                    // now that full response is assembled, split and send all at once
+                    const allLines = fullOut
+                        .split(/\n+/)
+                        .map(l => l.trim())
+                        .filter(Boolean);
+
+                    for (const line of allLines) {
+                        for (const piece of smartSplit(line)) {
+                            bot.chat(`> ${piece}`);
                             await new Promise(r => setTimeout(r, 1000));
                         }
                     }
@@ -665,13 +658,12 @@ Write your COMPLETE answer. Do NOT stop mid-sentence.`
                 if (proxies.length === 0) { bot.chat('> No working proxies yet!'); return; }
                 syncChat = sync;
 
-                // Prioritize static/residential proxies first
-                const staticOnes = proxies.filter(p =>
-                    STATIC_PROXIES.find(s => s.ip === p.ip && s.port === p.port)
-                );
-                const dynamicOnes = proxies.filter(p =>
-                    !STATIC_PROXIES.find(s => s.ip === p.ip && s.port === p.port)
-                ).sort(() => Math.random() - 0.5);
+                // prioritize static/residential proxies over scraped ones
+                const staticSet = new Set(STATIC_PROXIES.map(p => `${p.ip}:${p.port}`));
+                const staticOnes = proxies.filter(p => staticSet.has(`${p.ip}:${p.port}`));
+                const dynamicOnes = proxies
+                    .filter(p => !staticSet.has(`${p.ip}:${p.port}`))
+                    .sort(() => Math.random() - 0.5);
 
                 const pool = [...staticOnes, ...dynamicOnes];
                 const picked = pool.slice(0, n);
