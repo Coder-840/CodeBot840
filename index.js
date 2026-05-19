@@ -8,7 +8,6 @@ const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const axios = require('axios');
 const SocksClient = require('socks').SocksClient;
 const { execSync } = require('child_process');
 
@@ -24,7 +23,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-/** ------------------- WINDOWS SLEEP PREVENTION ------------------- **/
 function preventSleep() {
     try {
         execSync('powershell -Command "Add-Type -TypeDefinition \'using System; using System.Runtime.InteropServices; public class Sleep { [DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint esFlags); }\'; [Sleep]::SetThreadExecutionState(0x80000003)"');
@@ -36,19 +34,7 @@ function preventSleep() {
 preventSleep();
 setInterval(preventSleep, 4 * 60 * 1000);
 
-/** ------------------- PROXY SYSTEM ------------------- **/
-const proxiesFile = './proxies.json';
-let proxies = [];
-if (fs.existsSync(proxiesFile)) {
-    try { proxies = JSON.parse(fs.readFileSync(proxiesFile)); } catch {}
-}
-function saveProxies() {
-    fs.writeFileSync(proxiesFile, JSON.stringify(proxies, null, 2));
-}
-
-// Hand-picked residential/ISP proxies from spys.one
-// High-uptime Cox, Performive, AT&T, and other ISP IPs
-const STATIC_PROXIES = [
+const NODES = [
     { ip: '192.252.210.233', port: 4145 },
     { ip: '98.188.47.132',   port: 4145 },
     { ip: '72.195.101.99',   port: 4145 },
@@ -74,107 +60,9 @@ const STATIC_PROXIES = [
     { ip: '187.63.9.62',     port: 63253 },
 ];
 
-// Seed static proxies into pool at startup
-for (const p of STATIC_PROXIES) {
-    if (!proxies.find(x => x.ip === p.ip && x.port === p.port)) {
-        proxies.push(p);
-    }
-}
-saveProxies();
-
-const SOURCES = [
-    'https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt',
-    'https://api.proxyscrape.com/v2/?request=getproxies&protocol=socks5&timeout=10000&country=all',
-    'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt',
-    'https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt',
-    'https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt',
-    'https://raw.githubusercontent.com/mmpx12/proxy-list/master/socks5.txt',
-    'https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt'
-];
-
-function parseList(text) {
-    return text.split('\n')
-        .map(l => l.trim())
-        .filter(l => l.includes(':'))
-        .map(l => {
-            const clean = l.replace(/^socks5:\/\//i, '');
-            const [ip, port] = clean.split(':');
-            const p = parseInt(port);
-            if (!ip || isNaN(p)) return null;
-            return { ip, port: p };
-        })
-        .filter(Boolean);
-}
-
-function testProxyFull(ip, port = 1080) {
-    return new Promise(resolve => {
-        SocksClient.createConnection({
-            proxy: { host: ip, port, type: 5 },
-            command: 'connect',
-            destination: { host: 'noBnoT.org', port: 25565 },
-            timeout: 10000
-        }).then(info => { info.socket.destroy(); resolve(true); })
-          .catch(() => resolve(false));
-    });
-}
-
-async function fetchProxies() {
-    try {
-        let all = [];
-        for (const url of SOURCES) {
-            try {
-                const res = await axios.get(url, { timeout: 8000 });
-                all.push(...parseList(res.data));
-            } catch {}
-        }
-
-        const unique = [];
-        const seen = new Set();
-        for (const p of all) {
-            const key = `${p.ip}:${p.port}`;
-            if (!seen.has(key)) { seen.add(key); unique.push(p); }
-        }
-
-        console.log(`[SCRAPER] ${unique.length} proxies fetched`);
-        const batch = unique.slice(0, 150);
-
-        const results = await Promise.allSettled(batch.map(p => testProxyFull(p.ip, p.port)));
-        for (let i = 0; i < results.length; i++) {
-            if (results[i].status === 'fulfilled' && results[i].value) {
-                const p = batch[i];
-                if (!proxies.find(x => x.ip === p.ip && x.port === p.port)) {
-                    proxies.push(p);
-                    console.log(`[VALID] ${p.ip}:${p.port} | Total: ${proxies.length}`);
-                }
-            }
-        }
-        saveProxies();
-    } catch (err) {
-        console.log('[SCRAPER ERROR]', err.message);
-    }
-}
-
-setInterval(fetchProxies, 10000);
-
-setInterval(async () => {
-    if (proxies.length === 0) return;
-    console.log('[CLEANER] Checking proxies...');
-    const snapshot = [...proxies];
-    const results = await Promise.allSettled(snapshot.map(p => testProxyFull(p.ip, p.port)));
-    const staticSet = new Set(STATIC_PROXIES.map(p => `${p.ip}:${p.port}`));
-    // never remove static proxies even if they fail temporarily
-    proxies = snapshot.filter((p, i) =>
-        staticSet.has(`${p.ip}:${p.port}`) ||
-        (results[i].status === 'fulfilled' && results[i].value)
-    );
-    console.log(`[CLEANER] Remaining: ${proxies.length}`);
-    saveProxies();
-}, 60000);
-
-/** ------------------- BOT SYSTEM ------------------- **/
 const bots = [];
-const proxyUsage = {};
-const MAX_PER_PROXY = 4;
+const nodeUsage = {};
+const MAX_PER_NODE = 4;
 
 const PASSWORD = 'YourSecurePassword123';
 const ignoredUsers = new Set(['player_840','chickentender','ig_t3v_2k','lightdrag3x','lightdrag3n','1234NPC1234','k0ngaz']);
@@ -206,7 +94,6 @@ function randomName() {
            nouns[Math.floor(Math.random() * nouns.length)] + num;
 }
 
-// Split at word boundaries — 253 chars max to leave room for "> " prefix
 function smartSplit(text, limit = 253) {
     const chunks = [];
     text = text.trim();
@@ -221,22 +108,26 @@ function smartSplit(text, limit = 253) {
     return chunks;
 }
 
-// ----------------- SPAWN BOT WITH SOCKS PROXY -----------------
-async function spawnBot(proxy) {
-    if (!proxyUsage[proxy.ip]) proxyUsage[proxy.ip] = 0;
-    if (proxyUsage[proxy.ip] >= MAX_PER_PROXY) return false;
+function testNodeFull(ip, port = 1080) {
+    return new Promise(resolve => {
+        SocksClient.createConnection({
+            proxy: { host: ip, port, type: 5 },
+            command: 'connect',
+            destination: { host: 'noBnoT.org', port: 25565 },
+            timeout: 10000
+        }).then(info => { info.socket.destroy(); resolve(true); })
+          .catch(() => resolve(false));
+    });
+}
 
-    const alive = await testProxyFull(proxy.ip, proxy.port);
-    if (!alive) {
-        const isStatic = STATIC_PROXIES.find(p => p.ip === proxy.ip && p.port === proxy.port);
-        if (!isStatic) {
-            proxies = proxies.filter(p => !(p.ip === proxy.ip && p.port === proxy.port));
-            saveProxies();
-        }
-        return false;
-    }
+async function spawnBot(node) {
+    if (!nodeUsage[node.ip]) nodeUsage[node.ip] = 0;
+    if (nodeUsage[node.ip] >= MAX_PER_NODE) return false;
 
-    proxyUsage[proxy.ip]++;
+    const alive = await testNodeFull(node.ip, node.port);
+    if (!alive) return false;
+
+    nodeUsage[node.ip]++;
 
     const bot = mineflayer.createBot({
         username: randomName(),
@@ -244,7 +135,7 @@ async function spawnBot(proxy) {
         timeout: 60000,
         connect: (client) => {
             SocksClient.createConnection({
-                proxy: { host: proxy.ip, port: proxy.port, type: 5 },
+                proxy: { host: node.ip, port: node.port, type: 5 },
                 command: 'connect',
                 destination: { host: 'noBnoT.org', port: 25565 },
                 timeout: 10000
@@ -252,13 +143,13 @@ async function spawnBot(proxy) {
                 client.setSocket(info.socket);
                 client.emit('connect');
             }).catch(err => {
-                console.log('Proxy failed:', proxy.ip);
+                console.log('Node failed:', node.ip);
                 client.emit('error', err);
             });
         }
     });
 
-    setupBot(bot, false, proxy);
+    setupBot(bot, false, node);
 
     let gibberishInterval = null;
     if (!syncChat) {
@@ -275,9 +166,9 @@ async function spawnBot(proxy) {
     bot.on('end', () => {
         const idx = bots.indexOf(bot);
         if (idx !== -1) bots.splice(idx, 1);
-        proxyUsage[proxy.ip] = Math.max(0, proxyUsage[proxy.ip] - 1);
+        nodeUsage[node.ip] = Math.max(0, nodeUsage[node.ip] - 1);
         if (gibberishInterval) clearInterval(gibberishInterval);
-        setTimeout(() => spawnBot(proxy), 10000);
+        setTimeout(() => spawnBot(node), 10000);
     });
 
     bots.push(bot);
@@ -285,7 +176,7 @@ async function spawnBot(proxy) {
     return new Promise(resolve => {
         const timeout = setTimeout(() => {
             cleanup();
-            console.log(`[TIMEOUT] ${bot.username} via ${proxy.ip} never logged in`);
+            console.log(`[TIMEOUT] ${bot.username} via ${node.ip} never logged in`);
             resolve(false);
         }, 30000);
 
@@ -298,16 +189,16 @@ async function spawnBot(proxy) {
 
         function onSpawn() {
             cleanup();
-            console.log(`[JOINED] ${bot.username} via ${proxy.ip}`);
+            console.log(`[JOINED] ${bot.username} via ${node.ip}`);
             resolve(true);
         }
 
         function onFail(err) {
             cleanup();
-            if (err) console.log(`[FAIL] ${bot.username} via ${proxy.ip}:`, err.message || err);
+            if (err) console.log(`[FAIL] ${bot.username} via ${node.ip}:`, err.message || err);
             const idx = bots.indexOf(bot);
             if (idx !== -1) bots.splice(idx, 1);
-            proxyUsage[proxy.ip] = Math.max(0, proxyUsage[proxy.ip] - 1);
+            nodeUsage[node.ip] = Math.max(0, nodeUsage[node.ip] - 1);
             resolve(false);
         }
 
@@ -317,7 +208,6 @@ async function spawnBot(proxy) {
     });
 }
 
-// ----------------- MAIN BOT -----------------
 function startMainBot() {
     const bot = mineflayer.createBot({
         host: 'noBnoT.org',
@@ -338,7 +228,6 @@ function startMainBot() {
         console.log(`[MAIN] Error: ${err.message}`);
     });
 
-    // Detect limbo/AFK server by watching for position staleness
     let lastPos = null;
     let stuckTicks = 0;
     setInterval(() => {
@@ -366,8 +255,7 @@ function startMainBot() {
     });
 }
 
-// ----------------- BOT SETUP -----------------
-function setupBot(bot, isMain = false, proxy = null) {
+function setupBot(bot, isMain = false, node = null) {
     bot.loadPlugin(Pathfinder);
     bot.loadPlugin(pvp);
 
@@ -386,7 +274,7 @@ function setupBot(bot, isMain = false, proxy = null) {
 
     bot.once('login', () => {
         setTimeout(() => bot.chat(`/login ${PASSWORD}`), 2000);
-        console.log(`${bot.username} connected via ${proxy ? proxy.ip : 'MAIN IP'}`);
+        console.log(`${bot.username} connected via ${node ? node.ip : 'MAIN IP'}`);
     });
 
     bot.on('messagestr', msg => {
@@ -400,7 +288,6 @@ function setupBot(bot, isMain = false, proxy = null) {
         if (t.includes('login')) bot.chat(`/login ${PASSWORD}`);
     });
 
-    // $hunt — attack ALL nearby entities, no exceptions
     setInterval(() => {
         if (!huntMode || !bot.entity) return;
         if (bot.pvp.target) return;
@@ -436,7 +323,6 @@ function setupBot(bot, isMain = false, proxy = null) {
         const lowerUser = username.toLowerCase();
         const isAdmin = ignoredUsers.has(lowerUser);
 
-        // FOLLOW-UP: AI responds using stored system prompt + full conversation history
         if (isMain && followUps[lowerUser]) {
             const now = Date.now();
             if (!followCooldown[lowerUser] || now - followCooldown[lowerUser] > 5000) {
@@ -595,7 +481,6 @@ Write your COMPLETE answer. Do NOT stop mid-sentence.`
                         }
                     ];
 
-                    // collect full response, continuing if model hit token limit
                     while (keepGoing) {
                         const resp = await O.chat.completions.create({
                             model: "llama-3.1-8b-instant",
@@ -607,7 +492,6 @@ Write your COMPLETE answer. Do NOT stop mid-sentence.`
                         const chunk = (choice?.message?.content || '')
                             .replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
-                        // join with newline to preserve paragraph structure
                         fullOut += (fullOut ? '\n' : '') + chunk;
                         messages.push({ role: 'assistant', content: chunk });
 
@@ -618,7 +502,6 @@ Write your COMPLETE answer. Do NOT stop mid-sentence.`
                         }
                     }
 
-                    // now that full response is assembled, split and send all at once
                     const allLines = fullOut
                         .split(/\n+/)
                         .map(l => l.trim())
@@ -655,29 +538,15 @@ Write your COMPLETE answer. Do NOT stop mid-sentence.`
                 const n = parseInt(parts[1]);
                 const sync = parts[2] === 'true';
                 if (isNaN(n)) return;
-                if (proxies.length === 0) { bot.chat('> No working proxies yet!'); return; }
                 syncChat = sync;
 
-                // prioritize static/residential proxies over scraped ones
-                const staticSet = new Set(STATIC_PROXIES.map(p => `${p.ip}:${p.port}`));
-                const staticOnes = proxies.filter(p => staticSet.has(`${p.ip}:${p.port}`));
-                const dynamicOnes = proxies
-                    .filter(p => !staticSet.has(`${p.ip}:${p.port}`))
-                    .sort(() => Math.random() - 0.5);
-
-                const pool = [...staticOnes, ...dynamicOnes];
-                const picked = pool.slice(0, n);
-
-                if (picked.length < n) {
-                    bot.chat(`> Only ${picked.length} proxies available`);
-                }
-
                 let spawned = 0;
-                for (const proxy of picked) {
-                    if (await spawnBot(proxy)) spawned++;
+                for (const node of NODES) {
+                    if (spawned >= n) break;
+                    if (await spawnBot(node)) spawned++;
                     await new Promise(r => setTimeout(r, 5000));
                 }
-                bot.chat(`> Summoned ${spawned}/${picked.length} bots | Proxies: ${proxies.length} | Sync: ${sync}`);
+                bot.chat(`> Summoned ${spawned}/${n} bots | Sync: ${sync}`);
                 break;
             }
 
@@ -713,6 +582,5 @@ Write your COMPLETE answer. Do NOT stop mid-sentence.`
     });
 }
 
-/** ------------------- START ------------------- **/
 startMainBot();
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
